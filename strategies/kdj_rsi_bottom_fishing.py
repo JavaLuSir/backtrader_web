@@ -287,16 +287,16 @@ class KDJRSIBottomFishing(bt.Strategy):
         # 交易日计数+1
         self.trading_days += 1
         
-        # 检查连续亏损重置：超过指定交易日无盈利，重置所有风控状态
+        # 检查连续亏损重置：超过指定交易日无盈利，直接重置所有风控状态
         if self.days_since_profit >= self.params.loss_reset_days:
-            if self.consecutive_losses > 0 or self.is_paused():
-                self.log(f'连续亏损{self.days_since_profit}个交易日后，重置所有风控状态')
-                self.consecutive_losses = 0
-                self.pause_until = None
-                self.daily_loss = 0
-                self.monthly_loss = 0  # 同时重置月度亏损统计
-                self.days_since_profit = 0
-                self.log('风控状态已重置，恢复正常交易')
+            self.log(f'连续亏损{self.days_since_profit}个交易日后，重置所有风控状态')
+            self.consecutive_losses = 0
+            self.pause_until = None
+            self.daily_loss = 0
+            self.monthly_loss = 0
+            self.days_since_profit = 0
+            self.log('风控状态已重置，恢复正常交易')
+            return True
         
         # 检查连续止损暂停
         if self.is_paused():
