@@ -65,6 +65,19 @@ class SMACrossover(bt.Strategy):
         # 用于避免在有未完成订单时重复下单
         self.order = None
 
+    def log(self, txt, dt=None):
+        """
+        日志输出
+        
+        用于调试和跟踪策略执行过程。
+        
+        参数:
+            txt: 日志文本
+            dt: 日期时间，默认为当前K线日期
+        """
+        dt = dt or self.datas[0].datetime.date(0)
+        print(f'{dt.isoformat()} - {txt}')
+
     def next(self):
         """
         每个K线执行的策略逻辑
@@ -105,6 +118,19 @@ class SMACrossover(bt.Strategy):
         # 检查订单是否已完成、取消、保证金不足或被拒绝
         # 如果是其中任何一种状态，说明订单已结束，重置订单状态
         if order.status in [order.Completed, order.Canceled, order.Margin, order.Rejected]:
+            # 买卖成交日志
+            if order.status == order.Completed:
+                if order.isbuy():
+                    self.log(f'买入成交 - 价格: {order.executed.price:.2f}, 数量: {order.executed.size}, 手续费: {order.executed.comm:.2f}')
+                elif order.issell():
+                    self.log(f'卖出成交 - 价格: {order.executed.price:.2f}, 数量: {order.executed.size}, 手续费: {order.executed.comm:.2f}')
+            elif order.status == order.Canceled:
+                self.log('订单取消')
+            elif order.status == order.Margin:
+                self.log('订单失败 - 保证金不足')
+            elif order.status == order.Rejected:
+                self.log('订单失败 - 被拒绝')
+            
             self.order = None  # 重置订单状态，允许新订单
 
 
