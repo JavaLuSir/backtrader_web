@@ -42,13 +42,25 @@ function renderMetrics(metrics) {
     els.metrics.textContent = "";
     return;
   }
+
+  const fmtPct = (x) => (Number.isFinite(Number(x)) ? `${Number(x).toFixed(2)}%` : "-");
+  const fmtRatio = (x) => (Number.isFinite(Number(x)) ? Number(x).toFixed(3) : "-");
+
   const parts = [
     `策略: ${metrics.strategy}`,
     `期初: ${formatMoney(metrics.start_cash)}`,
     `期末: ${formatMoney(metrics.end_value)}`,
     `收益: ${formatMoney(metrics.pnl)} (${metrics.return_pct.toFixed(2)}%)`,
+    `年化: ${fmtPct(metrics.annual_return_pct)}`,
+    `夏普: ${fmtRatio(metrics.sharpe)}`,
+    `索提诺: ${fmtRatio(metrics.sortino)}`,
+    `最大回撤: ${fmtPct(metrics.max_drawdown_pct)}`,
+    `胜率: ${fmtPct(metrics.win_rate_pct)}`,
+    `盈亏比: ${fmtRatio(metrics.avg_win_loss_ratio)}`,
+    `卡尔马: ${fmtRatio(metrics.calmar)}`,
     `买/卖: ${metrics.buy_count}/${metrics.sell_count}`,
   ];
+
   els.metrics.textContent = parts.join(" | ");
 }
 
