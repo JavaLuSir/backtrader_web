@@ -1,0 +1,9 @@
+fastapi>=0.111.0
+uvicorn[standard]>=0.30.0
+SQLAlchemy>=2.0.0
+pymysql>=1.1.0
+pandas>=2.0.0
+python-dotenv>=1.0.0
+backtrader>=1.9.78.123
+yfinance>=0.2.40
+matplotlib>=3.8.0

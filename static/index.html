@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Backtrader Web</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <div id="app">
+      <aside id="sidebar">
+        <div class="sidebar-title">策略列表</div>
+        <div id="strategy-list" class="strategy-list"></div>
+      </aside>
+
+      <main id="main">
+        <section id="controls">
+          <div class="control-row">
+            <label class="control">
+              <span>股票代码</span>
+              <input id="symbol" type="text" value="AAPL" placeholder="AAPL" />
+            </label>
+
+            <label class="control">
+              <span>资金金额</span>
+              <input id="cash" type="number" step="100" value="100000" />
+            </label>
+
+            <label class="control">
+              <span>开始时间</span>
+              <input id="startDate" type="date" />
+            </label>
+
+            <label class="control">
+              <span>结束时间</span>
+              <input id="endDate" type="date" />
+            </label>
+
+            <button id="runBtn" class="primary">开始回测</button>
+          </div>
+
+          <div class="meta-row">
+            <div id="status" class="status">准备就绪</div>
+            <div id="metrics" class="metrics"></div>
+            <button id="exportBtn" class="secondary" disabled>导出交易CSV</button>
+          </div>
+        </section>
+
+        <section id="chart-section">
+          <canvas id="chart"></canvas>
+        </section>
+      </main>
+    </div>
+
+    <script src="/static/app.js"></script>
+  </body>
+</html>
+
