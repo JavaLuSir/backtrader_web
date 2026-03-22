@@ -113,11 +113,11 @@ class KDJRSIBottomFishing(bt.Strategy):
         # ===== 初始化 KDJ 指标 =====
         # KDJ指标包含K、D、J三条线
         # K和D线范围0-100，J线可以超过这个范围
-        self.kdj = bt.indicators.StochasticFast(
+        self.kdj = bt.indicators.Stochastic(
             self.data,
             period=self.p.kdj_period,
-            fastk_period=self.p.kdj_fastk,
-            slowd_period=self.p.kdj_slowk,
+            fastk=self.p.kdj_fastk,
+            slowk=self.p.kdj_slowk,
         )
         
         # ===== 初始化 RSI 指标 =====
