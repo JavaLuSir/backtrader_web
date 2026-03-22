@@ -47,11 +47,16 @@
         </section>
 
         <section id="chart-section">
-          <canvas id="chart"></canvas>
+          <div id="kline-container"></div>
+          <div id="equity-container">
+            <div class="chart-title">资金曲线</div>
+            <canvas id="chart"></canvas>
+          </div>
         </section>
       </main>
     </div>
 
+    <script src="https://unpkg.com/lightweight-charts@4.1.0/dist/lightweight-charts.standalone.production.js"></script>
     <script src="/static/app.js"></script>
   </body>
 </html>

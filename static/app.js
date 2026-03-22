@@ -9,6 +9,7 @@ const els = {
   status: document.getElementById("status"),
   metrics: document.getElementById("metrics"),
   canvas: document.getElementById("chart"),
+  klineContainer: document.getElementById("kline-container"),
 };
 
 let selectedStrategyId = null;
@@ -220,7 +221,112 @@ function drawTriangle(ctx, x, y, size, color, direction) {
   ctx.restore();
 }
 
-function renderChart(result) {
+let klineChart = null;
+let candleSeries = null;
+let volumeSeries = null;
+
+function renderKlineChart(result) {
+  const container = els.klineContainer;
+  
+  if (!result || !result.ohlcv || result.ohlcv.length === 0) {
+    container.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--muted);">暂无K线数据</div>';
+    return;
+  }
+
+  container.innerHTML = '';
+
+  klineChart = LightweightCharts.createChart(container, {
+    layout: {
+      background: { type: 'solid', color: 'transparent' },
+      textColor: '#aab3d6',
+    },
+    grid: {
+      vertLines: { color: 'rgba(255,255,255,0.05)' },
+      horzLines: { color: 'rgba(255,255,255,0.05)' },
+    },
+    crosshair: {
+      mode: LightweightCharts.CrosshairMode.Normal,
+    },
+    rightPriceScale: {
+      borderColor: 'rgba(255,255,255,0.1)',
+    },
+    timeScale: {
+      borderColor: 'rgba(255,255,255,0.1)',
+      timeVisible: true,
+    },
+    handleScroll: { vertTouchDrag: false },
+  });
+
+  candleSeries = klineChart.addCandlestickSeries({
+    upColor: '#3ddc97',
+    downColor: '#ff4d4f',
+    borderUpColor: '#3ddc97',
+    borderDownColor: '#ff4d4f',
+    wickUpColor: '#3ddc97',
+    wickDownColor: '#ff4d4f',
+  });
+
+  volumeSeries = klineChart.addHistogramSeries({
+    color: '#26a69a',
+    priceFormat: { type: 'volume' },
+    priceScaleId: '',
+  });
+  volumeSeries.priceScale().applyOptions({
+    scaleMargins: { top: 0.8, bottom: 0 },
+  });
+
+  const ohlcvData = result.ohlcv.map(d => ({
+    time: d.time,
+    open: d.open,
+    high: d.high,
+    low: d.low,
+    close: d.close,
+  }));
+
+  const volumeData = result.ohlcv.map(d => ({
+    time: d.time,
+    value: d.volume,
+    color: d.close >= d.open ? 'rgba(61,220,151,0.4)' : 'rgba(255,77,79,0.4)',
+  }));
+
+  candleSeries.setData(ohlcvData);
+  volumeSeries.setData(volumeData);
+
+  const buys = result.buys || [];
+  const sells = result.sells || [];
+
+  const buyMarkers = buys.map(m => ({
+    time: m.date,
+    position: 'belowBar',
+    color: '#3ddc97',
+    shape: 'arrowUp',
+    text: 'B',
+  }));
+
+  const sellMarkers = sells.map(m => ({
+    time: m.date,
+    position: 'aboveBar',
+    color: '#ff4d4f',
+    shape: 'arrowDown',
+    text: 'S',
+  }));
+
+  candleSeries.setMarkers([...buyMarkers, ...sellMarkers]);
+
+  const resizeObserver = new ResizeObserver(() => {
+    if (klineChart) {
+      klineChart.applyOptions({
+        width: container.clientWidth,
+        height: container.clientHeight,
+      });
+    }
+  });
+  resizeObserver.observe(container);
+
+  klineChart.timeScale().fitContent();
+}
+
+function renderEquityChart(result) {
   const canvas = els.canvas;
   const changed = resizeCanvasToDisplaySize(canvas);
   if (!changed && !result) return;
@@ -271,7 +377,6 @@ function renderChart(result) {
   const xAt = (i) => left + (i / (n - 1)) * (right - left);
   const yAt = (v) => top + ((maxV - v) / (maxV - minV)) * (bottom - top);
 
-  // grid + axes
   ctx.strokeStyle = "rgba(255,255,255,0.08)";
   ctx.lineWidth = 1;
   const gridLines = 6;
@@ -283,7 +388,6 @@ function renderChart(result) {
     ctx.stroke();
   }
 
-  // y labels
   ctx.fillStyle = "rgba(170,179,214,0.9)";
   ctx.textAlign = "right";
   ctx.textBaseline = "middle";
@@ -294,7 +398,6 @@ function renderChart(result) {
     ctx.fillText(formatMoney(v), left - 10, y);
   }
 
-  // x labels
   ctx.textAlign = "center";
   ctx.textBaseline = "top";
   const xTicks = 6;
@@ -304,7 +407,6 @@ function renderChart(result) {
     ctx.fillText(dates[idx], x, bottom + 10);
   }
 
-  // equity line
   ctx.strokeStyle = "rgba(79,124,255,0.95)";
   ctx.lineWidth = 2;
   ctx.beginPath();
@@ -312,7 +414,6 @@ function renderChart(result) {
   for (let i = 1; i < n; i++) ctx.lineTo(xAt(i), yAt(values[i]));
   ctx.stroke();
 
-  // markers
   const dateToIndex = new Map();
   for (let i = 0; i < dates.length; i++) dateToIndex.set(dates[i], i);
 
@@ -331,6 +432,11 @@ function renderChart(result) {
   }
 
   ctx.restore();
+}
+
+function renderChart(result) {
+  renderKlineChart(result);
+  renderEquityChart(result);
 }
 
 async function runBacktest() {
@@ -393,7 +499,15 @@ function setup() {
 
   els.runBtn.addEventListener("click", runBacktest);
   els.exportBtn.addEventListener("click", exportTradesCsv);
-  window.addEventListener("resize", () => renderChart(lastResult));
+  window.addEventListener("resize", () => {
+    renderEquityChart(lastResult);
+    if (klineChart) {
+      klineChart.applyOptions({
+        width: els.klineContainer.clientWidth,
+        height: els.klineContainer.clientHeight,
+      });
+    }
+  });
 }
 
 setup();

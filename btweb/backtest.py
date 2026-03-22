@@ -13,6 +13,7 @@ class BacktestResult:
     buys: list[dict]
     sells: list[dict]
     metrics: dict
+    ohlcv: list[dict] = tuple()
 
 
 def _wrap_strategy(strategy_cls: type[bt.Strategy]) -> type[bt.Strategy]:
@@ -21,6 +22,7 @@ def _wrap_strategy(strategy_cls: type[bt.Strategy]) -> type[bt.Strategy]:
             super().__init__()
             self._web_equity: list[dict] = []
             self._web_markers: list[dict] = []
+            self._web_ohlcv: list[dict] = []
 
         def next(self):
             super().next()
@@ -28,6 +30,14 @@ def _wrap_strategy(strategy_cls: type[bt.Strategy]) -> type[bt.Strategy]:
             self._web_equity.append(
                 {"date": dt.isoformat(), "value": float(self.broker.getvalue())}
             )
+            self._web_ohlcv.append({
+                "time": dt.isoformat(),
+                "open": float(self.data.open[0]),
+                "high": float(self.data.high[0]),
+                "low": float(self.data.low[0]),
+                "close": float(self.data.close[0]),
+                "volume": float(self.data.volume[0]),
+            })
 
         def notify_order(self, order):
             super().notify_order(order)
@@ -35,18 +45,13 @@ def _wrap_strategy(strategy_cls: type[bt.Strategy]) -> type[bt.Strategy]:
                 return
             dt = self.datas[0].datetime.date(0)
             action = "buy" if order.isbuy() else "sell"
-            cash = float(self.broker.getcash())
-            value = float(self.broker.getvalue())
-            position_size = float(self.position.size)
             self._web_markers.append(
                 {
                     "date": dt.isoformat(),
                     "action": action,
                     "price": float(order.executed.price),
                     "size": float(order.executed.size),
-                    "cash": cash,
-                    "value": value,
-                    "position_size": position_size,
+                    "value": float(self.broker.getvalue()),
                 }
             )
 
@@ -79,6 +84,7 @@ def run_backtest(
     strat = results[0]
 
     equity: list[dict] = getattr(strat, "_web_equity", [])
+    ohlcv: list[dict] = getattr(strat, "_web_ohlcv", [])
     markers: list[dict] = getattr(strat, "_web_markers", [])
     buys = [m for m in markers if m.get("action") == "buy"]
     sells = [m for m in markers if m.get("action") == "sell"]
@@ -98,5 +104,5 @@ def run_backtest(
         "sell_count": len(sells),
     }
 
-    return BacktestResult(equity=equity, buys=buys, sells=sells, metrics=metrics)
+    return BacktestResult(equity=equity, buys=buys, sells=sells, metrics=metrics, ohlcv=ohlcv)
 
