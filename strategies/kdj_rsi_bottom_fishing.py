@@ -113,12 +113,16 @@ class KDJRSIBottomFishing(bt.Strategy):
         # ===== 初始化 KDJ 指标 =====
         # KDJ指标包含K、D、J三条线
         # K和D线范围0-100，J线可以超过这个范围
+        # Backtrader的Stochastic参数: period, period_dfast(=K平滑), period_dslow(=D平滑)
         self.kdj = bt.indicators.Stochastic(
             self.data,
             period=self.p.kdj_period,
-            fastk=self.p.kdj_fastk,
-            slowk=self.p.kdj_slowk,
+            period_dfast=self.p.kdj_fastk,
+            period_dslow=self.p.kdj_slowk,
         )
+        
+        # 手动计算J线: J = 3*K - 2*D
+        self.kdj.j = 3 * self.kdj.lines.percK - 2 * self.kdj.lines.percD
         
         # ===== 初始化 RSI 指标 =====
         # RSI6: 短期RSI，对价格变化更敏感
@@ -141,13 +145,13 @@ class KDJRSIBottomFishing(bt.Strategy):
         # ===== 初始化交叉指标 =====
         # K线上穿D线（金叉/死叉）
         self.kd_cross = bt.indicators.CrossOver(
-            self.kdj.lines.k,
-            self.kdj.lines.d
+            self.kdj.lines.percK,
+            self.kdj.lines.percD
         )
         # J线下穿K线（用于KDJ死叉检测）
         self.jk_cross = bt.indicators.CrossOver(
-            self.kdj.lines.j,
-            self.kdj.lines.k
+            self.kdj.j,
+            self.kdj.lines.percK
         )
     
     def log(self, txt, dt=None):
@@ -308,7 +312,7 @@ class KDJRSIBottomFishing(bt.Strategy):
         
         # ===== 信号1: KDJ超卖金叉 =====
         # 条件: J<20 且 K线上穿D线
-        if (self.kdj.lines.j[-1] < 20 and self.kd_cross[0] > 0):
+        if (self.kdj.j[-1] < 20 and self.kd_cross[0] > 0):
             signals['kdj_golden_cross'] = True
         
         # ===== 信号2: RSI双重超卖反弹 =====
@@ -364,7 +368,7 @@ class KDJRSIBottomFishing(bt.Strategy):
         
         # ===== 加仓信号2: KDJ金叉且J>50 =====
         # 条件: K线上穿D线 且 J>50
-        if self.kd_cross[0] > 0 and self.kdj.lines.j[0] > self.p.kdj_j_add_threshold:
+        if self.kd_cross[0] > 0 and self.kdj.j[0] > self.p.kdj_j_add_threshold:
             signals['kdj_golden_j50'] = True
         
         return signals
@@ -407,7 +411,7 @@ class KDJRSIBottomFishing(bt.Strategy):
             
             # 止盈条件2: KDJ死叉（J>80后下穿）
             # 需要确认J线之前站上过80
-            if (self.kdj.lines.j[-1] > self.params.kdj_j_overbought and 
+            if (self.kdj.j[-1] > self.params.kdj_j_overbought and 
                 self.jk_cross[0] < 0):
                 signals['kdj_death_cross'] = True
             
@@ -476,7 +480,7 @@ class KDJRSIBottomFishing(bt.Strategy):
             
             # 第一批止盈: 满足条件且未止盈过
             if any_profit_signal and not self.first_profit_taken:
-                self.log(f'止盈第一批(50%)! 信号: RSI6={self.rsi6[0]:.2f}, KDJ_J={self.kdj.lines.j[0]:.2f}')
+                self.log(f'止盈第一批(50%)! 信号: RSI6={self.rsi6[0]:.2f}, KDJ_J={self.kdj.j[0]:.2f}')
                 self.order = self.sell(size=self.position.size // 2)
                 self.first_profit_taken = True
                 self.remaining_position = self.position.size
@@ -484,7 +488,7 @@ class KDJRSIBottomFishing(bt.Strategy):
             
             # 第二批止盈: 剩余持仓再次触发条件
             if any_profit_signal and self.first_profit_taken:
-                self.log(f'止盈第二批(清仓)! 信号: RSI6={self.rsi6[0]:.2f}, KDJ_J={self.kdj.lines.j[0]:.2f}')
+                self.log(f'止盈第二批(清仓)! 信号: RSI6={self.rsi6[0]:.2f}, KDJ_J={self.kdj.j[0]:.2f}')
                 self.order = self.close()
                 self.position_pct = 0
                 self.remaining_position = 0
@@ -518,7 +522,7 @@ class KDJRSIBottomFishing(bt.Strategy):
                     new_total_pct = min(self.position_pct + add_size, 0.70)
                     target_size = new_total_pct - self.position_pct
                     
-                    self.log(f'加仓! 目标: {new_total_pct*100:.0f}%, RSI6={self.rsi6[0]:.2f}, KDJ_J={self.kdj.lines.j[0]:.2f}')
+                    self.log(f'加仓! 目标: {new_total_pct*100:.0f}%, RSI6={self.rsi6[0]:.2f}, KDJ_J={self.kdj.j[0]:.2f}')
                     self.order = self.buy(size=int(target_size * 100))  # 按合约数量
                     self.position_pct = new_total_pct
                     return
