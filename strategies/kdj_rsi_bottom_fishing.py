@@ -202,8 +202,14 @@ class KDJRSIBottomFishing(bt.Strategy):
             self.order = None
         
         # 订单取消、保证金不足或拒绝
-        elif order.status in [order.Canceled, order.Margin, order.Rejected]:
-            self.log(f'订单失败: {[order.Canceled, order.Margin, order.Rejected][order.status - 2]}')
+        elif order.status == order.Canceled:
+            self.log('订单失败: 已取消')
+            self.order = None
+        elif order.status == order.Margin:
+            self.log('订单失败: 保证金不足')
+            self.order = None
+        elif order.status == order.Rejected:
+            self.log('订单失败: 被拒绝')
             self.order = None
     
     def notify_trade(self, trade):
