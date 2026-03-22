@@ -253,8 +253,14 @@ function renderKlineChart(result) {
 
   container.innerHTML = '';
   console.log('Rendering K-line chart with', result.ohlcv.length, 'candles');
+  
+  const containerRect = container.getBoundingClientRect();
+  const chartWidth = containerRect.width || container.offsetWidth || 800;
+  const chartHeight = containerRect.height || container.offsetHeight || 400;
 
   klineChart = LightweightCharts.createChart(container, {
+    width: chartWidth,
+    height: chartHeight,
     layout: {
       background: { type: 'solid', color: 'transparent' },
       textColor: '#aab3d6',
