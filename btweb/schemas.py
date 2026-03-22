@@ -19,4 +19,5 @@ class BacktestResponse(BaseModel):
     buys: list[dict]
     sells: list[dict]
     metrics: dict
+    ohlcv: list[dict] = []
 

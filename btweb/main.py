@@ -91,6 +91,6 @@ def api_backtest(payload: BacktestRequest, session: Session = Depends(get_sessio
         commission=payload.commission,
     )
     return BacktestResponse(
-        equity=result.equity, buys=result.buys, sells=result.sells, metrics=result.metrics
+        equity=result.equity, buys=result.buys, sells=result.sells, metrics=result.metrics, ohlcv=result.ohlcv
     )
 
