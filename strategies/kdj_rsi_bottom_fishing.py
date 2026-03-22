@@ -29,6 +29,7 @@ KDJ+RSI 抄底策略 - 趋势反转型量化策略
 - 单日最大亏损: 3%
 - 单月最大亏损: 10%
 - 连续止损3次: 暂停3天
+- 连续亏损20个交易日: 重置风控状态，重新开始交易
 """
 
 import backtrader as bt
@@ -75,6 +76,9 @@ class KDJRSIBottomFishing(bt.Strategy):
         
         # ===== 移动止盈 =====
         ("trailing_stop", 0.05),   # 移动止盈回撤比例
+        
+        # ===== 风控重置 =====
+        ("loss_reset_days", 20),    # 连续亏损超过此天数后重置风控状态
     )
     
     def __init__(self):
@@ -105,6 +109,8 @@ class KDJRSIBottomFishing(bt.Strategy):
         self.month_start_date = None  # 当月开始日期
         self.last_trade_date = None  # 上次交易日期
         self.daily_pnl = 0          # 当日盈亏
+        self.days_since_profit = 0   # 上次盈利以来的交易日计数
+        self.trading_days = 0        # 总交易天数计数
         
         # ===== 底背离检测历史数据 =====
         self.price_history = deque(maxlen=self.p.div_lookback + 1)
@@ -219,12 +225,14 @@ class KDJRSIBottomFishing(bt.Strategy):
         # 更新连续止损计数
         if pnl < 0:
             self.consecutive_losses += 1
+            self.days_since_profit += 1  # 亏损交易日计数+1
             # 连续止损3次，暂停3天
             if self.consecutive_losses >= 3:
                 self.pause_until = self.data.datetime.date(0) + timedelta(days=3)
                 self.log(f'连续止损3次，暂停交易至 {self.pause_until}')
         else:
             self.consecutive_losses = 0
+            self.days_since_profit = 0  # 盈利后重置计数
         
         # 更新当月亏损
         if self.month_start_date is None:
@@ -276,6 +284,17 @@ class KDJRSIBottomFishing(bt.Strategy):
         返回:
             bool: 如果允许交易返回True，否则返回False
         """
+        # 交易日计数+1
+        self.trading_days += 1
+        
+        # 检查连续亏损重置：超过指定交易日无盈利，重置风控状态
+        if self.days_since_profit >= self.params.loss_reset_days:
+            if self.consecutive_losses > 0 or self.is_paused():
+                self.log(f'连续亏损{self.days_since_profit}个交易日后，重置风控状态')
+                self.consecutive_losses = 0
+                self.pause_until = None
+                self.days_since_profit = 0
+        
         # 检查连续止损暂停
         if self.is_paused():
             return False
