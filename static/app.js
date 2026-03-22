@@ -228,12 +228,19 @@ let volumeSeries = null;
 function renderKlineChart(result) {
   const container = els.klineContainer;
   
+  if (typeof LightweightCharts === 'undefined') {
+    container.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#ff4d4f;">K线图库加载失败，请刷新页面</div>';
+    console.error('LightweightCharts not loaded');
+    return;
+  }
+  
   if (!result || !result.ohlcv || result.ohlcv.length === 0) {
     container.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--muted);">暂无K线数据</div>';
     return;
   }
 
   container.innerHTML = '';
+  console.log('Rendering K-line chart with', result.ohlcv.length, 'candles');
 
   klineChart = LightweightCharts.createChart(container, {
     layout: {
@@ -276,7 +283,7 @@ function renderKlineChart(result) {
   });
 
   const ohlcvData = result.ohlcv.map(d => ({
-    time: d.time,
+    time: Math.floor(new Date(d.time).getTime() / 1000),
     open: d.open,
     high: d.high,
     low: d.low,
@@ -284,19 +291,25 @@ function renderKlineChart(result) {
   }));
 
   const volumeData = result.ohlcv.map(d => ({
-    time: d.time,
+    time: Math.floor(new Date(d.time).getTime() / 1000),
     value: d.volume,
     color: d.close >= d.open ? 'rgba(61,220,151,0.4)' : 'rgba(255,77,79,0.4)',
   }));
 
-  candleSeries.setData(ohlcvData);
-  volumeSeries.setData(volumeData);
+  try {
+    candleSeries.setData(ohlcvData);
+    volumeSeries.setData(volumeData);
+    console.log('K-line data set successfully');
+  } catch (e) {
+    console.error('Error setting K-line data:', e);
+  }
 
   const buys = result.buys || [];
   const sells = result.sells || [];
+  console.log('Markers:', buys.length, 'buys,', sells.length, 'sells');
 
   const buyMarkers = buys.map(m => ({
-    time: m.date,
+    time: Math.floor(new Date(m.date).getTime() / 1000),
     position: 'belowBar',
     color: '#3ddc97',
     shape: 'arrowUp',
@@ -304,14 +317,19 @@ function renderKlineChart(result) {
   }));
 
   const sellMarkers = sells.map(m => ({
-    time: m.date,
+    time: Math.floor(new Date(m.date).getTime() / 1000),
     position: 'aboveBar',
     color: '#ff4d4f',
     shape: 'arrowDown',
     text: 'S',
   }));
 
-  candleSeries.setMarkers([...buyMarkers, ...sellMarkers]);
+  try {
+    candleSeries.setMarkers([...buyMarkers, ...sellMarkers]);
+    console.log('Markers set successfully');
+  } catch (e) {
+    console.error('Error setting markers:', e);
+  }
 
   const resizeObserver = new ResizeObserver(() => {
     if (klineChart) {
