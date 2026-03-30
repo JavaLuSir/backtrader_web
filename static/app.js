@@ -235,9 +235,9 @@ function openSourceModal() {
 }
 
 function renderSourceCode(strategyId, source) {
-  if (els.sourceModal.classList.contains("hidden")) return;
   els.sourceTitle.textContent = `策略源码 - ${strategyId}`;
   els.sourceCode.textContent = source;
+  els.sourceCode.className = "language-python";
 
   if (window.hljs && typeof window.hljs.highlightElement === "function") {
     window.hljs.highlightElement(els.sourceCode);
