@@ -1,5 +1,7 @@
 const els = {
   list: document.getElementById("strategy-list"),
+  sidebar: document.getElementById("sidebar"),
+  toggleSidebar: document.getElementById("toggleSidebar"),
   symbol: document.getElementById("symbol"),
   cash: document.getElementById("cash"),
   startDate: document.getElementById("startDate"),
@@ -603,6 +605,11 @@ async function runBacktest() {
 function setupEvents() {
   els.runBtn.addEventListener("click", runBacktest);
   els.exportBtn.addEventListener("click", exportTradesCsv);
+
+  // 侧边栏折叠/展开
+  els.toggleSidebar.addEventListener("click", () => {
+    els.sidebar.classList.toggle("collapsed");
+  });
 
   els.contextRunBacktest.addEventListener("click", () => {
     hideContextMenu();

@@ -29,13 +29,52 @@ body {
   border-right: 1px solid var(--border);
   padding: 14px;
   overflow: auto;
+  transition: width 0.3s ease, padding 0.3s ease;
+}
+
+#sidebar.collapsed {
+  width: 50px;
+  padding: 14px 8px;
+  overflow: hidden;
+}
+
+#sidebar.collapsed .sidebar-title,
+#sidebar.collapsed .strategy-item {
+  display: none;
+}
+
+.sidebar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
 }
 
 .sidebar-title {
   font-weight: 700;
   font-size: 14px;
   color: var(--muted);
-  margin: 6px 0 12px 0;
+  margin: 0;
+}
+
+.toggle-btn {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  transition: transform 0.3s ease;
+}
+
+.toggle-btn:hover {
+  background: rgba(255,255,255,0.1);
+  color: var(--text);
+}
+
+#sidebar.collapsed .toggle-btn {
+  transform: rotate(180deg);
 }
 
 .strategy-list {
