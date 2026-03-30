@@ -12,6 +12,10 @@ const els = {
   metrics: document.getElementById("metrics"),
   canvas: document.getElementById("chart"),
   klineContainer: document.getElementById("kline-container"),
+  klineLegend: document.getElementById("kline-legend"),
+  ma5Color: document.getElementById("ma5Color"),
+  ma10Color: document.getElementById("ma10Color"),
+  ma20Color: document.getElementById("ma20Color"),
   contextMenu: document.getElementById("strategy-context-menu"),
   contextRunBacktest: document.getElementById("contextRunBacktest"),
   contextViewSource: document.getElementById("contextViewSource"),
@@ -28,6 +32,15 @@ let lastResult = null;
 let klineChart = null;
 let candleSeries = null;
 let volumeSeries = null;
+let maSeries = {};
+
+function getMaConfig() {
+  return [
+    { period: 5, color: els.ma5Color.value, label: "MA5" },
+    { period: 10, color: els.ma10Color.value, label: "MA10" },
+    { period: 20, color: els.ma20Color.value, label: "MA20" },
+  ];
+}
 
 const sourceCache = new Map();
 
@@ -409,6 +422,39 @@ function renderKlineChart(result) {
   candleSeries.setData(candleData);
   volumeSeries.setData(volumeData);
 
+  function calcSMA(data, period) {
+    const result = [];
+    for (let i = 0; i < data.length; i++) {
+      if (i < period - 1) {
+        result.push({ time: data[i].time, value: null });
+      } else {
+        let sum = 0;
+        for (let j = 0; j < period; j++) {
+          sum += data[i - j].close;
+        }
+        result.push({ time: data[i].time, value: sum / period });
+      }
+    }
+    return result;
+  }
+
+  const currentMaConfig = getMaConfig();
+  maSeries = {};
+  currentMaConfig.forEach(cfg => {
+    const series = klineChart.addLineSeries({ color: cfg.color, lineWidth: 1, priceLineVisible: false });
+    series.setData(calcSMA(candleData, cfg.period));
+    maSeries[cfg.label] = { series, color: cfg.color, period: cfg.period };
+  });
+
+  const lastCandle = candleData[candleData.length - 1];
+  let legendHtml = `<span style="margin-right:12px"><span style="display:inline-block;width:10px;height:10px;background:#3ddc97;border-radius:2px;margin-right:4px"></span>OHLC</span>`;
+  currentMaConfig.forEach(cfg => {
+    const maVal = calcSMA(candleData, cfg.period);
+    const val = maVal[maVal.length - 1]?.value?.toFixed(2) || "-";
+    legendHtml += `<span style="margin-right:12px"><span style="display:inline-block;width:10px;height:2px;background:${cfg.color};margin-right:4px;vertical-align:middle"></span>${cfg.label}: ${val}</span>`;
+  });
+  els.klineLegend.innerHTML = legendHtml;
+
   const buyMarkers = (result.buys || []).map((m) => ({
     time: Math.floor(new Date(m.date).getTime() / 1000),
     position: "belowBar",
@@ -431,18 +477,25 @@ function renderKlineChart(result) {
 
 function renderEquityChart(result) {
   const canvas = els.canvas;
-  const changed = resizeCanvasToDisplaySize(canvas);
-  if (!changed && !result) return;
+  const rect = canvas.getBoundingClientRect();
+  const dpr = window.devicePixelRatio || 1;
+  const w = Math.floor(rect.width * dpr);
+  const h = Math.floor(rect.height * dpr);
+  const containerW = rect.width;
+
+  const extraW = 100;
+  if (canvas.width !== w + extraW || canvas.height !== h) {
+    canvas.width = w + extraW;
+    canvas.height = h;
+    canvas.style.width = (w + extraW) / dpr + "px";
+  }
 
   const ctx = canvas.getContext("2d");
-  const w = canvas.width;
-  const h = canvas.height;
-
   ctx.clearRect(0, 0, w, h);
 
   ctx.save();
   ctx.scale(1, 1);
-  ctx.font = `${Math.max(12, Math.floor(w / 100))}px ui-sans-serif, system-ui`;
+  ctx.font = `${Math.max(12, Math.floor(containerW / 100))}px ui-sans-serif, system-ui`;
   ctx.lineJoin = "round";
   ctx.lineCap = "round";
 
@@ -452,10 +505,10 @@ function renderEquityChart(result) {
     return;
   }
 
-  const padLeft = Math.floor(Math.min(w, h) * 0.12);
-  const padRight = Math.floor(Math.min(w, h) * 0.05);
-  const padTop = Math.floor(Math.min(w, h) * 0.08);
-  const padBottom = Math.floor(Math.min(w, h) * 0.12);
+  const padLeft = Math.max(85, Math.floor(containerW * 0.12));
+  const padRight = 20;
+  const padTop = Math.floor(Math.min(containerW, h) * 0.08);
+  const padBottom = Math.floor(Math.min(containerW, h) * 0.12);
   const left = padLeft;
   const right = w - padRight;
   const top = padTop;
@@ -503,7 +556,7 @@ function renderEquityChart(result) {
     const t = i / 3;
     const v = maxV - t * (maxV - minV);
     const y = yAt(v);
-    ctx.fillText(formatMoney(v), left - 15, y);
+    ctx.fillText(formatMoney(v), left - 30, y);
   }
 
   ctx.textAlign = "center";
@@ -609,6 +662,12 @@ function setupEvents() {
   // 侧边栏折叠/展开
   els.toggleSidebar.addEventListener("click", () => {
     els.sidebar.classList.toggle("collapsed");
+    setTimeout(() => {
+      if (klineChart) {
+        klineChart.resize(els.klineContainer.clientWidth, els.klineContainer.clientHeight);
+      }
+      renderEquityChart(lastResult);
+    }, 320);
   });
 
   els.contextRunBacktest.addEventListener("click", () => {

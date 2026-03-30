@@ -44,6 +44,14 @@
             </label>
 
             <button id="runBtn" class="primary">开始回测</button>
+            <div class="ma-settings">
+              <span class="ma-label">MA5</span>
+              <input id="ma5Color" type="color" value="#ff9500" title="MA5颜色">
+              <span class="ma-label">MA10</span>
+              <input id="ma10Color" type="color" value="#5ac8fa" title="MA10颜色">
+              <span class="ma-label">MA20</span>
+              <input id="ma20Color" type="color" value="#af52de" title="MA20颜色">
+            </div>
           </div>
 
           <div class="meta-row">
@@ -54,7 +62,10 @@
         </section>
 
         <section id="chart-section">
-          <div id="kline-container"></div>
+          <div id="kline-wrapper">
+            <div id="kline-legend"></div>
+            <div id="kline-container"></div>
+          </div>
           <div id="equity-container">
             <div class="chart-title">资金曲线</div>
             <canvas id="chart"></canvas>
