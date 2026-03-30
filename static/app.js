@@ -236,11 +236,14 @@ function openSourceModal() {
 
 function renderSourceCode(strategyId, source) {
   els.sourceTitle.textContent = `策略源码 - ${strategyId}`;
-  els.sourceCode.textContent = source;
-  els.sourceCode.className = "language-python";
-
-  if (window.hljs && typeof window.hljs.highlightElement === "function") {
-    window.hljs.highlightElement(els.sourceCode);
+  
+  if (window.hljs && window.hljs.highlight) {
+    const result = window.hljs.highlight(source, { language: "python" });
+    els.sourceCode.innerHTML = result.value;
+    els.sourceCode.className = "hljs language-python";
+  } else {
+    els.sourceCode.textContent = source;
+    els.sourceCode.className = "language-python";
   }
 }
 
