@@ -450,11 +450,14 @@ function renderEquityChart(result) {
     return;
   }
 
-  const pad = Math.floor(Math.min(w, h) * 0.09);
-  const left = pad;
-  const right = w - pad;
-  const top = pad;
-  const bottom = h - pad;
+  const padLeft = Math.floor(Math.min(w, h) * 0.12);
+  const padRight = Math.floor(Math.min(w, h) * 0.05);
+  const padTop = Math.floor(Math.min(w, h) * 0.08);
+  const padBottom = Math.floor(Math.min(w, h) * 0.12);
+  const left = padLeft;
+  const right = w - padRight;
+  const top = padTop;
+  const bottom = h - padBottom;
 
   const equity = result.equity;
   const dates = equity.map((p) => p.date);
@@ -498,7 +501,7 @@ function renderEquityChart(result) {
     const t = i / 3;
     const v = maxV - t * (maxV - minV);
     const y = yAt(v);
-    ctx.fillText(formatMoney(v), left - 10, y);
+    ctx.fillText(formatMoney(v), left - 15, y);
   }
 
   ctx.textAlign = "center";
@@ -506,7 +509,8 @@ function renderEquityChart(result) {
   for (let i = 0; i < 6; i++) {
     const idx = Math.floor((i / 5) * (n - 1));
     const x = xAt(idx);
-    ctx.fillText(dates[idx], x, bottom + 10);
+    const dateStr = dates[idx];
+    ctx.fillText(dateStr ? dateStr.substring(5) : '', x, bottom + 12);
   }
 
   ctx.strokeStyle = "rgba(79,124,255,0.95)";
