@@ -5,11 +5,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Backtrader Web</title>
     <link rel="stylesheet" href="/static/styles.css" />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css"
+    />
   </head>
   <body>
     <div id="app">
       <aside id="sidebar">
-        <div class="sidebar-title">策略列表</div>
+        <div class="sidebar-title">策略列表（右键可查看源码）</div>
         <div id="strategy-list" class="strategy-list"></div>
       </aside>
 
@@ -56,8 +60,25 @@
       </main>
     </div>
 
+    <div id="strategy-context-menu" class="context-menu hidden">
+      <button id="contextRunBacktest" type="button">开始回测</button>
+      <button id="contextViewSource" type="button">查看源代码</button>
+    </div>
+
+    <div id="source-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="source-modal-title">
+      <div id="source-modal-mask" class="modal-mask"></div>
+      <div class="modal-content">
+        <div class="modal-header">
+          <div id="source-modal-title">策略源码</div>
+          <button id="source-modal-close" class="icon-btn" type="button">关闭</button>
+        </div>
+        <pre class="code-block"><code id="source-code" class="language-python"></code></pre>
+      </div>
+    </div>
+
     <script src="https://unpkg.com/lightweight-charts@4.1.0/dist/lightweight-charts.standalone.production.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/python.min.js"></script>
     <script src="/static/app.js"></script>
   </body>
 </html>
-

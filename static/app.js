@@ -10,10 +10,24 @@ const els = {
   metrics: document.getElementById("metrics"),
   canvas: document.getElementById("chart"),
   klineContainer: document.getElementById("kline-container"),
+  contextMenu: document.getElementById("strategy-context-menu"),
+  contextRunBacktest: document.getElementById("contextRunBacktest"),
+  contextViewSource: document.getElementById("contextViewSource"),
+  sourceModal: document.getElementById("source-modal"),
+  sourceModalMask: document.getElementById("source-modal-mask"),
+  sourceModalClose: document.getElementById("source-modal-close"),
+  sourceTitle: document.getElementById("source-modal-title"),
+  sourceCode: document.getElementById("source-code"),
 };
 
 let selectedStrategyId = null;
+let contextStrategyId = null;
 let lastResult = null;
+let klineChart = null;
+let candleSeries = null;
+let volumeSeries = null;
+
+const sourceCache = new Map();
 
 function isoDate(d) {
   const pad = (n) => String(n).padStart(2, "0");
@@ -50,7 +64,7 @@ function renderMetrics(metrics) {
     `策略: ${metrics.strategy}`,
     `期初: ${formatMoney(metrics.start_cash)}`,
     `期末: ${formatMoney(metrics.end_value)}`,
-    `收益: ${formatMoney(metrics.pnl)} (${metrics.return_pct.toFixed(2)}%)`,
+    `收益: ${formatMoney(metrics.pnl)} (${fmtPct(metrics.return_pct)})`,
     `年化: ${fmtPct(metrics.annual_return_pct)}`,
     `夏普: ${fmtRatio(metrics.sharpe)}`,
     `索提诺: ${fmtRatio(metrics.sortino)}`,
@@ -83,13 +97,13 @@ function safeFilename(s) {
 }
 
 function makeTradesCsv(result) {
-  const metrics = (result && result.metrics) || {};
+  const metrics = result?.metrics || {};
   const symbol = metrics.symbol || "";
   const strategy = metrics.strategy || "";
   const start = metrics.start_date || "";
   const end = metrics.end_date || "";
 
-  const trades = [...((result && result.buys) || []), ...((result && result.sells) || [])];
+  const trades = [...(result?.buys || []), ...(result?.sells || [])];
   trades.sort(
     (a, b) =>
       String(a.date || "").localeCompare(String(b.date || "")) ||
@@ -167,6 +181,74 @@ function selectStrategy(id) {
   if (node) node.classList.add("active");
 }
 
+function hideContextMenu() {
+  els.contextMenu.classList.add("hidden");
+  contextStrategyId = null;
+}
+
+function showContextMenu(x, y, strategyId) {
+  contextStrategyId = strategyId;
+  const menu = els.contextMenu;
+  menu.classList.remove("hidden");
+
+  const rect = menu.getBoundingClientRect();
+  const left = Math.min(x, window.innerWidth - rect.width - 8);
+  const top = Math.min(y, window.innerHeight - rect.height - 8);
+
+  menu.style.left = `${Math.max(8, left)}px`;
+  menu.style.top = `${Math.max(8, top)}px`;
+}
+
+function openSourceModal() {
+  if (!contextStrategyId) return;
+
+  const strategyId = contextStrategyId;
+  hideContextMenu();
+
+  els.sourceTitle.textContent = `策略源码 - ${strategyId}`;
+  els.sourceCode.textContent = "加载中...";
+  els.sourceModal.classList.remove("hidden");
+  document.body.style.overflow = "hidden";
+
+  const cached = sourceCache.get(strategyId);
+  if (cached) {
+    renderSourceCode(strategyId, cached);
+    return;
+  }
+
+  fetch(`/api/strategies/source/${encodeURIComponent(strategyId)}`)
+    .then(async (res) => {
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.detail || "获取源码失败");
+      }
+      return res.json();
+    })
+    .then((data) => {
+      const source = String(data?.source || "");
+      sourceCache.set(strategyId, source);
+      renderSourceCode(strategyId, source);
+    })
+    .catch((err) => {
+      els.sourceCode.textContent = `加载失败: ${err?.message || err}`;
+    });
+}
+
+function renderSourceCode(strategyId, source) {
+  if (els.sourceModal.classList.contains("hidden")) return;
+  els.sourceTitle.textContent = `策略源码 - ${strategyId}`;
+  els.sourceCode.textContent = source;
+
+  if (window.hljs && typeof window.hljs.highlightElement === "function") {
+    window.hljs.highlightElement(els.sourceCode);
+  }
+}
+
+function closeSourceModal() {
+  els.sourceModal.classList.add("hidden");
+  document.body.style.overflow = "";
+}
+
 async function loadStrategies() {
   const res = await fetch("/api/strategies");
   if (!res.ok) throw new Error("加载策略列表失败");
@@ -187,7 +269,18 @@ async function loadStrategies() {
       <div class="strategy-name">${item.name}</div>
       <div class="strategy-id">${item.id}</div>
     `;
-    div.addEventListener("click", () => selectStrategy(item.id));
+
+    div.addEventListener("click", () => {
+      hideContextMenu();
+      selectStrategy(item.id);
+    });
+
+    div.addEventListener("contextmenu", (evt) => {
+      evt.preventDefault();
+      selectStrategy(item.id);
+      showContextMenu(evt.clientX, evt.clientY, item.id);
+    });
+
     els.list.appendChild(div);
   }
 
@@ -233,132 +326,101 @@ function drawTriangle(ctx, x, y, size, color, direction) {
   ctx.restore();
 }
 
-let klineChart = null;
-let candleSeries = null;
-let volumeSeries = null;
-
 function renderKlineChart(result) {
   const container = els.klineContainer;
-  
-  if (typeof LightweightCharts === 'undefined') {
-    container.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#ff4d4f;">K线图库加载失败，请刷新页面</div>';
-    console.error('LightweightCharts not loaded');
+  if (!container) return;
+
+  if (klineChart) {
+    klineChart.remove();
+    klineChart = null;
+    candleSeries = null;
+    volumeSeries = null;
+  }
+
+  container.innerHTML = "";
+
+  if (typeof LightweightCharts === "undefined") {
+    container.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#ff4d4f;">K线图依赖加载失败</div>';
     return;
   }
-  
+
   if (!result || !result.ohlcv || result.ohlcv.length === 0) {
     container.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--muted);">暂无K线数据</div>';
     return;
   }
 
-  container.innerHTML = '';
-  console.log('Rendering K-line chart with', result.ohlcv.length, 'candles');
-  
-  const containerRect = container.getBoundingClientRect();
-  const chartWidth = containerRect.width || container.offsetWidth || 800;
-  const chartHeight = containerRect.height || container.offsetHeight || 400;
+  const width = container.clientWidth || 800;
+  const height = container.clientHeight || 420;
 
   klineChart = LightweightCharts.createChart(container, {
-    width: chartWidth,
-    height: chartHeight,
+    width,
+    height,
     layout: {
-      background: { type: 'solid', color: 'transparent' },
-      textColor: '#aab3d6',
+      background: { type: "solid", color: "transparent" },
+      textColor: "#aab3d6",
     },
     grid: {
-      vertLines: { color: 'rgba(255,255,255,0.05)' },
-      horzLines: { color: 'rgba(255,255,255,0.05)' },
+      vertLines: { color: "rgba(255,255,255,0.05)" },
+      horzLines: { color: "rgba(255,255,255,0.05)" },
     },
-    crosshair: {
-      mode: LightweightCharts.CrosshairMode.Normal,
-    },
-    rightPriceScale: {
-      borderColor: 'rgba(255,255,255,0.1)',
-    },
-    timeScale: {
-      borderColor: 'rgba(255,255,255,0.1)',
-      timeVisible: true,
-    },
+    rightPriceScale: { borderColor: "rgba(255,255,255,0.1)" },
+    timeScale: { borderColor: "rgba(255,255,255,0.1)", timeVisible: true },
     handleScroll: { vertTouchDrag: false },
   });
 
   candleSeries = klineChart.addCandlestickSeries({
-    upColor: '#3ddc97',
-    downColor: '#ff4d4f',
-    borderUpColor: '#3ddc97',
-    borderDownColor: '#ff4d4f',
-    wickUpColor: '#3ddc97',
-    wickDownColor: '#ff4d4f',
+    upColor: "#3ddc97",
+    downColor: "#ff4d4f",
+    borderUpColor: "#3ddc97",
+    borderDownColor: "#ff4d4f",
+    wickUpColor: "#3ddc97",
+    wickDownColor: "#ff4d4f",
   });
 
   volumeSeries = klineChart.addHistogramSeries({
-    color: '#26a69a',
-    priceFormat: { type: 'volume' },
-    priceScaleId: '',
+    color: "#26a69a",
+    priceFormat: { type: "volume" },
+    priceScaleId: "",
   });
+
   volumeSeries.priceScale().applyOptions({
     scaleMargins: { top: 0.8, bottom: 0 },
   });
 
-  const ohlcvData = result.ohlcv.map(d => ({
+  const candleData = result.ohlcv.map((d) => ({
     time: Math.floor(new Date(d.time).getTime() / 1000),
-    open: d.open,
-    high: d.high,
-    low: d.low,
-    close: d.close,
+    open: Number(d.open),
+    high: Number(d.high),
+    low: Number(d.low),
+    close: Number(d.close),
   }));
 
-  const volumeData = result.ohlcv.map(d => ({
+  const volumeData = result.ohlcv.map((d) => ({
     time: Math.floor(new Date(d.time).getTime() / 1000),
-    value: d.volume,
-    color: d.close >= d.open ? 'rgba(61,220,151,0.4)' : 'rgba(255,77,79,0.4)',
+    value: Number(d.volume),
+    color: Number(d.close) >= Number(d.open) ? "rgba(61,220,151,0.4)" : "rgba(255,77,79,0.4)",
   }));
 
-  try {
-    candleSeries.setData(ohlcvData);
-    volumeSeries.setData(volumeData);
-    console.log('K-line data set successfully');
-  } catch (e) {
-    console.error('Error setting K-line data:', e);
-  }
+  candleSeries.setData(candleData);
+  volumeSeries.setData(volumeData);
 
-  const buys = result.buys || [];
-  const sells = result.sells || [];
-  console.log('Markers:', buys.length, 'buys,', sells.length, 'sells');
-
-  const buyMarkers = buys.map(m => ({
+  const buyMarkers = (result.buys || []).map((m) => ({
     time: Math.floor(new Date(m.date).getTime() / 1000),
-    position: 'belowBar',
-    color: '#3ddc97',
-    shape: 'arrowUp',
-    text: 'B',
+    position: "belowBar",
+    color: "#3ddc97",
+    shape: "arrowUp",
+    text: "B",
   }));
 
-  const sellMarkers = sells.map(m => ({
+  const sellMarkers = (result.sells || []).map((m) => ({
     time: Math.floor(new Date(m.date).getTime() / 1000),
-    position: 'aboveBar',
-    color: '#ff4d4f',
-    shape: 'arrowDown',
-    text: 'S',
+    position: "aboveBar",
+    color: "#ff4d4f",
+    shape: "arrowDown",
+    text: "S",
   }));
 
-  try {
-    candleSeries.setMarkers([...buyMarkers, ...sellMarkers]);
-    console.log('Markers set successfully');
-  } catch (e) {
-    console.error('Error setting markers:', e);
-  }
-
-  const resizeObserver = new ResizeObserver(() => {
-    if (klineChart) {
-      klineChart.applyOptions({
-        width: container.clientWidth,
-        height: container.clientHeight,
-      });
-    }
-  });
-  resizeObserver.observe(container);
-
+  candleSeries.setMarkers([...buyMarkers, ...sellMarkers]);
   klineChart.timeScale().fitContent();
 }
 
@@ -396,15 +458,18 @@ function renderEquityChart(result) {
   const values = equity.map((p) => Number(p.value));
   let minV = Math.min(...values);
   let maxV = Math.max(...values);
+
   if (!Number.isFinite(minV) || !Number.isFinite(maxV)) {
     drawText(ctx, "数据异常", w / 2, h / 2, "rgba(255,77,79,0.9)", "center");
     ctx.restore();
     return;
   }
+
   if (maxV === minV) {
     maxV += 1;
     minV -= 1;
   }
+
   const margin = (maxV - minV) * 0.08;
   maxV += margin;
   minV -= margin;
@@ -415,9 +480,8 @@ function renderEquityChart(result) {
 
   ctx.strokeStyle = "rgba(255,255,255,0.08)";
   ctx.lineWidth = 1;
-  const gridLines = 6;
-  for (let i = 0; i <= gridLines; i++) {
-    const y = top + (i / gridLines) * (bottom - top);
+  for (let i = 0; i <= 6; i++) {
+    const y = top + (i / 6) * (bottom - top);
     ctx.beginPath();
     ctx.moveTo(left, y);
     ctx.lineTo(right, y);
@@ -436,9 +500,8 @@ function renderEquityChart(result) {
 
   ctx.textAlign = "center";
   ctx.textBaseline = "top";
-  const xTicks = 6;
-  for (let i = 0; i < xTicks; i++) {
-    const idx = Math.floor((i / (xTicks - 1)) * (n - 1));
+  for (let i = 0; i < 6; i++) {
+    const idx = Math.floor((i / 5) * (n - 1));
     const x = xAt(idx);
     ctx.fillText(dates[idx], x, bottom + 10);
   }
@@ -447,21 +510,23 @@ function renderEquityChart(result) {
   ctx.lineWidth = 2;
   ctx.beginPath();
   ctx.moveTo(xAt(0), yAt(values[0]));
-  for (let i = 1; i < n; i++) ctx.lineTo(xAt(i), yAt(values[i]));
+  for (let i = 1; i < n; i++) {
+    ctx.lineTo(xAt(i), yAt(values[i]));
+  }
   ctx.stroke();
 
   const dateToIndex = new Map();
-  for (let i = 0; i < dates.length; i++) dateToIndex.set(dates[i], i);
+  for (let i = 0; i < dates.length; i++) {
+    dateToIndex.set(dates[i], i);
+  }
 
-  const buys = result.buys || [];
-  const sells = result.sells || [];
-
-  for (const m of buys) {
+  for (const m of result.buys || []) {
     const i = dateToIndex.get(m.date);
     if (i == null) continue;
     drawTriangle(ctx, xAt(i), yAt(values[i]), 7, "rgba(61,220,151,0.95)", "up");
   }
-  for (const m of sells) {
+
+  for (const m of result.sells || []) {
     const i = dateToIndex.get(m.date);
     if (i == null) continue;
     drawTriangle(ctx, xAt(i), yAt(values[i]), 7, "rgba(255,77,79,0.95)", "down");
@@ -528,13 +593,31 @@ async function runBacktest() {
   }
 }
 
-function setup() {
-  setDefaultDates();
-  renderChart(null);
-  loadStrategies().catch((e) => setStatus(String(e?.message || e)));
-
+function setupEvents() {
   els.runBtn.addEventListener("click", runBacktest);
   els.exportBtn.addEventListener("click", exportTradesCsv);
+
+  els.contextRunBacktest.addEventListener("click", () => {
+    hideContextMenu();
+    runBacktest();
+  });
+  els.contextViewSource.addEventListener("click", openSourceModal);
+  els.sourceModalClose.addEventListener("click", closeSourceModal);
+  els.sourceModalMask.addEventListener("click", closeSourceModal);
+
+  document.addEventListener("click", (evt) => {
+    if (!els.contextMenu.contains(evt.target)) {
+      hideContextMenu();
+    }
+  });
+
+  document.addEventListener("keydown", (evt) => {
+    if (evt.key === "Escape") {
+      hideContextMenu();
+      closeSourceModal();
+    }
+  });
+
   window.addEventListener("resize", () => {
     renderEquityChart(lastResult);
     if (klineChart) {
@@ -546,5 +629,14 @@ function setup() {
   });
 }
 
-setup();
+function setup() {
+  setDefaultDates();
+  renderChart(null);
+  setupEvents();
 
+  loadStrategies().catch((e) => {
+    setStatus(String(e?.message || e));
+  });
+}
+
+setup();

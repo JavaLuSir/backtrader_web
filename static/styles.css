@@ -188,3 +188,100 @@ canvas#chart {
   button.primary { grid-column: 1 / -1; }
 }
 
+
+.context-menu {
+  position: fixed;
+  z-index: 1200;
+  min-width: 140px;
+  padding: 6px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: rgba(18, 26, 51, 0.96);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+}
+
+.context-menu button {
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.context-menu button:hover {
+  background: rgba(79, 124, 255, 0.15);
+}
+
+.hidden {
+  display: none !important;
+}
+
+.modal {
+  position: fixed;
+  inset: 0;
+  z-index: 1300;
+}
+
+.modal-mask {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+}
+
+.modal-content {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(1100px, calc(100vw - 28px));
+  height: min(80vh, 760px);
+  background: #0f1732;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  background: rgba(18, 26, 51, 0.9);
+  color: var(--text);
+  font-weight: 700;
+}
+
+.icon-btn {
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: rgba(8, 12, 26, 0.7);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.icon-btn:hover {
+  border-color: rgba(255, 255, 255, 0.28);
+}
+
+.code-block {
+  flex: 1;
+  margin: 0;
+  padding: 12px;
+  overflow: auto;
+  background: #0b1229;
+}
+
+#source-code {
+  font-family: Consolas, Menlo, Monaco, "Courier New", monospace;
+  font-size: 13px;
+  line-height: 1.5;
+  tab-size: 4;
+}

@@ -31,7 +31,7 @@ def _startup_init() -> None:
         Base.metadata.create_all(bind=engine)
         logger.info("db tables ensured")
     except Exception as exc:  # noqa: BLE001
-        # DB 不通时不要阻塞网页启动（用户可能只是想先看页面）
+        # Keep web UI available even when DB is temporarily unavailable.
         logger.warning("db init skipped: %s", exc)
 
 
@@ -59,6 +59,35 @@ def api_strategies() -> dict:
     return {"items": list_strategies(settings.strategies_dir)}
 
 
+def _resolve_strategy_file(strategy_id: str) -> Path:
+    base = settings.strategies_dir.resolve()
+    path = (base / strategy_id).resolve()
+
+    if path.suffix.lower() != ".py":
+        raise HTTPException(status_code=400, detail="strategy_id must be a .py file")
+    if base not in path.parents:
+        raise HTTPException(status_code=400, detail="invalid strategy path")
+    if not path.exists() or not path.is_file():
+        raise HTTPException(status_code=404, detail="strategy not found")
+    return path
+
+
+@app.get("/api/strategies/source/{strategy_id}")
+def api_strategy_source(strategy_id: str) -> dict:
+    path = _resolve_strategy_file(strategy_id)
+    try:
+        source = path.read_text(encoding="utf-8")
+    except UnicodeDecodeError:
+        source = path.read_text(encoding="gbk", errors="replace")
+
+    return {
+        "id": strategy_id,
+        "name": path.stem,
+        "language": "python",
+        "source": source,
+    }
+
+
 @app.post("/api/backtest", response_model=BacktestResponse)
 def api_backtest(payload: BacktestRequest, session: Session = Depends(get_session)) -> BacktestResponse:
     symbol = payload.symbol.strip().upper()
@@ -73,12 +102,15 @@ def api_backtest(payload: BacktestRequest, session: Session = Depends(get_sessio
         raise HTTPException(status_code=400, detail=str(exc))
 
     df = load_ohlcv_dataframe(
-        session, symbol=symbol, start_date=payload.start_date, end_date=payload.end_date
+        session,
+        symbol=symbol,
+        start_date=payload.start_date,
+        end_date=payload.end_date,
     )
     if df is None or df.empty:
         raise HTTPException(
             status_code=400,
-            detail=f"数据库中没有 {symbol} 在该日期范围内的数据，请先采集入库",
+            detail=f"No OHLCV data found for {symbol} in the selected date range. Please ingest data first.",
         )
 
     result = run_backtest(
@@ -90,7 +122,11 @@ def api_backtest(payload: BacktestRequest, session: Session = Depends(get_sessio
         end_date=payload.end_date,
         commission=payload.commission,
     )
-    return BacktestResponse(
-        equity=result.equity, buys=result.buys, sells=result.sells, metrics=result.metrics, ohlcv=result.ohlcv
-    )
 
+    return BacktestResponse(
+        equity=result.equity,
+        buys=result.buys,
+        sells=result.sells,
+        metrics=result.metrics,
+        ohlcv=result.ohlcv,
+    )
