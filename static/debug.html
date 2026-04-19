@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8" />
+    <title>Debug Test</title>
+</head>
+<body>
+    <h1>Debug Test</h1>
+    <button id="editBtn">测试Edit</button>
+    <button id="viewBtn">测试View</button>
+    <div id="log"></div>
+    <script>
+        function log(msg) {
+            document.getElementById('log').textContent += msg + '\n';
+            console.log(msg);
+        }
+        
+        // 等待DOM加载
+        document.addEventListener('DOMContentLoaded', function() {
+            log('DOM loaded');
+            
+            var editBtn = document.getElementById('contextEditSource');
+            var viewBtn = document.getElementById('contextViewSource');
+            
+            log('editBtn: ' + editBtn);
+            log('viewBtn: ' + viewBtn);
+            
+            if (editBtn) {
+                log('Adding edit listener');
+                editBtn.addEventListener('click', function() {
+                    log('Edit clicked!');
+                });
+            }
+            
+            if (viewBtn) {
+                log('Adding view listener');
+                viewBtn.addEventListener('click', function() {
+                    log('View clicked!');
+                });
+            }
+        });
+    </script>
+</body>
+</html>
