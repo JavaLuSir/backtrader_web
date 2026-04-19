@@ -13,8 +13,8 @@ from .backtest import run_backtest
 from .config import load_settings
 from .data import load_ohlcv_dataframe
 from .db import engine, get_session
-from .models import Base
-from .schemas import BacktestRequest, BacktestResponse
+from .models import Base, StockInfo
+from .schemas import BacktestRequest, BacktestResponse, StockInfoResponse
 from .strategy_loader import list_strategies, load_strategy_class
 
 logger = logging.getLogger("btweb")
@@ -54,6 +54,33 @@ def health(session: Session = Depends(get_session)) -> dict:
     return {"ok": True}
 
 
+@app.get("/api/stocks")
+def api_stocks(
+    q: str = "", limit: int = 20, session: Session = Depends(get_session)
+) -> list[StockInfoResponse]:
+    """搜索股票列表，支持按代码或名称模糊匹配"""
+    query = session.query(StockInfo)
+
+    if q.strip():
+        search_term = f"%{q.strip().upper()}%"
+        query = query.filter(
+            (StockInfo.symbol.like(search_term)) | (StockInfo.name.like(search_term))
+        )
+
+    results = query.order_by(StockInfo.symbol).limit(limit).all()
+
+    stock_responses = [
+        StockInfoResponse(
+            symbol=stock.symbol,
+            name=stock.name,
+            exchange=stock.exchange,
+            market=stock.market,
+        )
+        for stock in results
+    ]
+    return stock_responses
+
+
 @app.get("/api/strategies")
 def api_strategies() -> dict:
     return {"items": list_strategies(settings.strategies_dir)}
@@ -89,7 +116,9 @@ def api_strategy_source(strategy_id: str) -> dict:
 
 
 @app.post("/api/backtest", response_model=BacktestResponse)
-def api_backtest(payload: BacktestRequest, session: Session = Depends(get_session)) -> BacktestResponse:
+def api_backtest(
+    payload: BacktestRequest, session: Session = Depends(get_session)
+) -> BacktestResponse:
     symbol = payload.symbol.strip().upper()
     if payload.start_date > payload.end_date:
         raise HTTPException(status_code=400, detail="start_date must be <= end_date")

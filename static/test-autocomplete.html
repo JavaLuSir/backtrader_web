@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>自动补全测试</title>
+    <style>
+        .test-container {
+            position: relative;
+            max-width: 600px;
+            margin: 50px auto;
+            font-family: Arial, sans-serif;
+        }
+        .test-input {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #007bff;
+            border-radius: 8px;
+            font-size: 16px;
+        }
+        .test-dropdown {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            background: white;
+            border: 1px solid #ddd;
+            border-top: none;
+            max-height: 200px;
+            overflow-y: auto;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+            display: none;
+            z-index: 1000;
+        }
+        .test-dropdown.show {
+            display: block;
+        }
+        .test-item {
+            padding: 10px;
+            cursor: pointer;
+            border-bottom: 1px solid #eee;
+        }
+        .test-item:hover, .test-item.active {
+            background: #e6f2ff;
+        }
+        .test-label {
+            display: block;
+            margin-bottom: 10px;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <div class="test-container">
+        <div class="test-label">测试股票代码自动补全功能</div>
+        <div class="test-input-wrapper">
+            <input type="text" id="testSymbol" class="test-input" placeholder="输入股票代码或名称，如 AAPL 或 Apple">
+            <div id="testAutocomplete" class="test-dropdown"></div>
+        </div>
+    </div>
+
+    <script>
+        const els = {
+            symbol: document.getElementById("testSymbol"),
+            autocomplete: document.getElementById("testAutocomplete"),
+        };
+
+        const mockStocks = {
+            "AAPL": "Apple Inc",
+            "GOOGL": "Alphabet Inc", 
+            "MSFT": "Microsoft Corporation",
+            "TSLA": "Tesla Inc",
+            "BABA": "Alibaba Group",
+            "0700.HK": "腾讯控股",
+            "9988.HK": "阿里巴巴-W",
+            "600000.SS": "浦发银行",
+            "000001.SZ": "平安银行",
+        };
+
+        function hideAutocomplete() {
+            els.autocomplete.classList.remove("show");
+            autocompleteItems = [];
+            autocompleteActiveIndex = -1;
+        }
+
+        function renderAutocomplete(items) {
+            if (!items || items.length === 0) {
+                els.autocomplete.innerHTML = '<div style="padding:10px; text-align:center; color:#999;">未找到匹配的股票</div>';
+                return;
+            }
+
+            els.autocomplete.innerHTML = items
+                .map((item, index) => `
+                    <div class="test-item ${index === autocompleteActiveIndex ? 'active' : ''}" 
+                         data-index="${index}">
+                        <strong>${item.symbol}</strong> - ${item.name}
+                        ${item.exchange ? ` (${item.exchange})` : ''}
+                    </div>
+                `)
+                .join("");
+
+            els.autocomplete.querySelectorAll(".test-item").forEach((el) => {
+                el.addEventListener("click", () => {
+                    const index = parseInt(el.dataset.index, 10);
+                    selectItem(items[index]);
+                });
+            });
+        }
+
+        function selectItem(item) {
+            if (!item) return;
+            els.symbol.value = item.symbol;
+            hideAutocomplete();
+            els.symbol.focus();
+        }
+
+        let autocompleteItems = [];
+        let autocompleteActiveIndex = -1;
+
+        els.symbol.addEventListener("input", async () => {
+            const query = els.symbol.value.trim();
+            if (!query) {
+                hideAutocomplete();
+                return;
+            }
+
+            clearTimeout(debounceTimer);
+            
+            debounceTimer = setTimeout(async () => {
+                const filtered = Object.entries(mockStocks)
+                    .filter(([code, _]) => 
+                        code.toUpperCase().includes(query.toUpperCase()) || 
+                        Object.values(mockStocks).includes(query)
+                    )
+                    .map(([code, name], index) => ({
+                        symbol: code,
+                        name: name,
+                        exchange: code.includes(".HK") ? "HKEX" : 
+                                code.includes(".SS") ? "SSE" : 
+                                code.includes(".SZ") ? "SZSE" : null
+                    }))
+                    .sort((a, b) => a.symbol.localeCompare(b.symbol));
+
+                autocompleteItems = filtered;
+                autocompleteActiveIndex = -1;
+
+                if (filtered.length > 0) {
+                    renderAutocomplete(filtered);
+                    els.autocomplete.classList.add("show");
+                } else {
+                    hideAutocomplete();
+                }
+            }, 300);
+        });
+
+        els.symbol.addEventListener("keydown", (e) => {
+            if (!els.autocomplete.classList.contains("show")) return;
+
+            if (e.key === "ArrowDown") {
+                e.preventDefault();
+                if (autocompleteActiveIndex < autocompleteItems.length - 1) {
+                    autocompleteActiveIndex++;
+                    renderAutocomplete(autocompleteItems);
+                }
+            } else if (e.key === "ArrowUp") {
+                e.preventDefault();
+                if (autocompleteActiveIndex > 0) {
+                    autocompleteActiveIndex--;
+                    renderAutocomplete(autocompleteItems);
+                }
+            } else if (e.key === "Enter") {
+                e.preventDefault();
+                if (autocompleteActiveIndex >= 0) {
+                    selectItem(autocompleteItems[autocompleteActiveIndex]);
+                }
+            } else if (e.key === "Escape") {
+                hideAutocomplete();
+            }
+        });
+    </script>
+</body>
+</html>

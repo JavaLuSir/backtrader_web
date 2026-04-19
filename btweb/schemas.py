@@ -6,7 +6,9 @@ from pydantic import BaseModel, Field
 
 
 class BacktestRequest(BaseModel):
-    strategy_id: str = Field(..., description="strategies/ 目录下的策略文件名，例如 sma_crossover.py")
+    strategy_id: str = Field(
+        ..., description="strategies/ 目录下的策略文件名，例如 sma_crossover.py"
+    )
     symbol: str = Field(..., min_length=1, max_length=16)
     cash: float = Field(100000.0, gt=0)
     start_date: date
@@ -21,3 +23,9 @@ class BacktestResponse(BaseModel):
     metrics: dict
     ohlcv: list[dict] = []
 
+
+class StockInfoResponse(BaseModel):
+    symbol: str
+    name: str
+    exchange: str | None = None
+    market: str | None = None

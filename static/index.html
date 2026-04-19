@@ -23,9 +23,12 @@
       <main id="main">
         <section id="controls">
           <div class="control-row">
-            <label class="control">
+            <label class="control control-autocomplete">
               <span>股票代码</span>
-              <input id="symbol" type="text" value="AAPL" placeholder="AAPL" />
+              <div class="autocomplete-wrapper">
+                <input id="symbol" type="text" value="AAPL" placeholder="输入代码或名称" autocomplete="off" />
+                <div id="symbolAutocomplete" class="autocomplete-dropdown"></div>
+              </div>
             </label>
 
             <label class="control">

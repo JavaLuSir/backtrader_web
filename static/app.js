@@ -3,6 +3,7 @@ const els = {
   sidebar: document.getElementById("sidebar"),
   toggleSidebar: document.getElementById("toggleSidebar"),
   symbol: document.getElementById("symbol"),
+  symbolAutocomplete: document.getElementById("symbolAutocomplete"),
   cash: document.getElementById("cash"),
   startDate: document.getElementById("startDate"),
   endDate: document.getElementById("endDate"),
@@ -33,6 +34,11 @@ let klineChart = null;
 let candleSeries = null;
 let volumeSeries = null;
 let maSeries = {};
+
+// 自动补全相关变量
+let autocompleteItems = null;
+let autocompleteActiveIndex = -1;
+let autocompleteTimer = null;
 
 function getMaConfig() {
   return [
@@ -76,28 +82,28 @@ function renderMetrics(metrics) {
   const fmtRatio = (x) => (Number.isFinite(Number(x)) ? Number(x).toFixed(3) : "-");
 
   const parts = [
-    `策略: ${metrics.strategy}`,
-    `期初: ${formatMoney(metrics.start_cash)}`,
-    `期末: ${formatMoney(metrics.end_value)}`,
-    `收益: ${formatMoney(metrics.pnl)} (${fmtPct(metrics.return_pct)})`,
-    `年化: ${fmtPct(metrics.annual_return_pct)}`,
-    `夏普: ${fmtRatio(metrics.sharpe)}`,
-    `索提诺: ${fmtRatio(metrics.sortino)}`,
-    `最大回撤: ${fmtPct(metrics.max_drawdown_pct)}`,
-    `胜率: ${fmtPct(metrics.win_rate_pct)}`,
-    `盈亏比: ${fmtRatio(metrics.avg_win_loss_ratio)}`,
-    `卡尔马: ${fmtRatio(metrics.calmar)}`,
-    `买/卖: ${metrics.buy_count}/${metrics.sell_count}`,
+    `策略：${metrics.strategy}`,
+    `期初：${formatMoney(metrics.start_cash)}`,
+    `期末：${formatMoney(metrics.end_value)}`,
+    `收益：${formatMoney(metrics.pnl)} (${fmtPct(metrics.return_pct)})`,
+    `年化：${fmtPct(metrics.annual_return_pct)}`,
+    `夏普：${fmtRatio(metrics.sharpe)}`,
+    `索提诺：${fmtRatio(metrics.sortino)}`,
+    `最大回撤：${fmtPct(metrics.max_drawdown_pct)}`,
+    `胜率：${fmtPct(metrics.win_rate_pct)}`,
+    `盈亏比：${fmtRatio(metrics.avg_win_loss_ratio)}`,
+    `卡尔马：${fmtRatio(metrics.calmar)}`,
+    `买/卖：${metrics.buy_count}/${metrics.sell_count}`,
   ];
 
   els.metrics.textContent = parts.join(" | ");
 }
 
-function escapeCsv(v) {
-  if (v === null || v === undefined) return "";
-  const s = String(v);
-  if (/[",\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
-  return s;
+function escapeHtml(text) {
+  if (!text) return "";
+  const div = document.createElement("div");
+  div.textContent = text;
+  return div.innerHTML;
 }
 
 function fmtNum(x, digits = 2) {
@@ -160,6 +166,13 @@ function makeTradesCsv(result) {
   return lines.join("\n");
 }
 
+function escapeCsv(v) {
+  if (v === null || v === undefined) return "";
+  const s = String(v);
+  if (/[",\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+  return s;
+}
+
 function downloadTextFile(filename, text, mimeType) {
   const blob = new Blob([text], { type: mimeType || "text/plain;charset=utf-8" });
   const url = URL.createObjectURL(blob);
@@ -200,6 +213,120 @@ function hideContextMenu() {
   els.contextMenu.classList.add("hidden");
   contextStrategyId = null;
 }
+
+// ========== 自动补全功能 ==========
+
+function hideAutocomplete() {
+  els.symbolAutocomplete.classList.remove("show");
+  autocompleteItems = null;
+  autocompleteActiveIndex = -1;
+}
+
+function renderAutocomplete(items) {
+  if (!items || items.length === 0) {
+    els.symbolAutocomplete.innerHTML = '<div class="autocomplete-empty">未找到匹配的股票</div>';
+    return;
+  }
+
+  els.symbolAutocomplete.innerHTML = items
+    .map((item, index) => `
+        <div class="autocomplete-item ${index === autocompleteActiveIndex ? 'active' : ''}" 
+             data-index="${index}">
+          <strong>${escapeHtml(item.symbol)}</strong>
+          <span style="color:var(--muted); margin-left:8px">${escapeHtml(item.name)}</span>
+          ${item.exchange ? `<span style="color:var(--muted); opacity:0.7; margin-left:6px">(${escapeHtml(item.exchange)})</span>` : ''}
+        </div>
+      `)
+    .join("");
+
+  // 绑定点击事件
+  els.symbolAutocomplete.querySelectorAll(".autocomplete-item").forEach((el) => {
+    el.addEventListener("click", () => {
+      const index = parseInt(el.dataset.index, 10);
+      selectAutocompleteItem(items[index]);
+    });
+  });
+}
+
+function selectAutocompleteItem(item) {
+  if (!item) return;
+  els.symbol.value = item.symbol;
+  hideAutocomplete();
+  els.symbol.focus();
+}
+
+async function searchStocks(query) {
+  try {
+    const params = new URLSearchParams({
+      q: query,
+      limit: "20",
+    });
+    const res = await fetch(`/api/stocks?${params}`);
+    if (!res.ok) return [];
+    return await res.json();
+  } catch (e) {
+    console.error("搜索股票失败:", e);
+    return [];
+  }
+}
+
+async function handleSymbolInput() {
+  const query = els.symbol.value.trim();
+
+  if (!query) {
+    hideAutocomplete();
+    return;
+  }
+
+  // 清除之前的定时器
+  if (autocompleteTimer) {
+    clearTimeout(autocompleteTimer);
+  }
+
+  // 设置新的定时器（300ms 防抖）
+  autocompleteTimer = setTimeout(async () => {
+    const items = await searchStocks(query);
+    autocompleteItems = items;
+    autocompleteActiveIndex = -1;
+
+    if (items.length > 0) {
+      renderAutocomplete(items);
+      els.symbolAutocomplete.classList.add("show");
+    } else {
+      hideAutocomplete();
+    }
+  }, 300);
+}
+
+function handleAutocompleteKeydown(e) {
+  if (!els.symbolAutocomplete.classList.contains("show")) {
+    return;
+  }
+
+  if (e.key === "ArrowDown") {
+    e.preventDefault();
+    if (autocompleteActiveIndex < autocompleteItems.length - 1) {
+      autocompleteActiveIndex++;
+      renderAutocomplete(autocompleteItems);
+    }
+  } else if (e.key === "ArrowUp") {
+    e.preventDefault();
+    if (autocompleteActiveIndex > 0) {
+      autocompleteActiveIndex--;
+      renderAutocomplete(autocompleteItems);
+    }
+  } else if (e.key === "Enter") {
+    e.preventDefault();
+    if (autocompleteActiveIndex >= 0 && autocompleteActiveIndex < autocompleteItems.length) {
+      selectAutocompleteItem(autocompleteItems[autocompleteActiveIndex]);
+    }
+  } else if (e.key === "Escape") {
+    hideAutocomplete();
+    autocompleteTimer = null;
+  }
+}
+
+// ========== 辅助函数 ==========
 
 function showContextMenu(x, y, strategyId) {
   contextStrategyId = strategyId;
@@ -245,7 +372,7 @@ function openSourceModal() {
       renderSourceCode(strategyId, source);
     })
     .catch((err) => {
-      els.sourceCode.textContent = `加载失败: ${err?.message || err}`;
+      els.sourceCode.textContent = `加载失败：${err?.message || err}`;
     });
 }
 
@@ -269,7 +396,7 @@ function closeSourceModal() {
 
 async function loadStrategies() {
   const res = await fetch("/api/strategies");
-  if (!res.ok) throw new Error("加载策略列表失败");
+  if (!res.ok) throw new Error("加载策略列表示失败");
   const data = await res.json();
   els.list.innerHTML = "";
 
@@ -358,12 +485,12 @@ function renderKlineChart(result) {
   container.innerHTML = "";
 
   if (typeof LightweightCharts === "undefined") {
-    container.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#ff4d4f;">K线图依赖加载失败</div>';
+    container.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#ff4d4f;">K 线图依赖加载失败</div>';
     return;
   }
 
   if (!result || !result.ohlcv || result.ohlcv.length === 0) {
-    container.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--muted);">暂无K线数据</div>';
+    container.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--muted);">暂无 K 线数据</div>';
     return;
   }
 
@@ -659,6 +786,20 @@ function setupEvents() {
   els.runBtn.addEventListener("click", runBacktest);
   els.exportBtn.addEventListener("click", exportTradesCsv);
 
+  // 股票代码输入事件 - 自动补全
+  els.symbol.addEventListener("input", handleSymbolInput);
+  els.symbol.addEventListener("keydown", handleAutocompleteKeydown);
+  
+  // 点击外部关闭自动补全
+  document.addEventListener("click", (evt) => {
+    if (!els.symbolAutocomplete.contains(evt.target) && !els.symbol.contains(evt.target)) {
+      hideAutocomplete();
+    }
+    if (!els.contextMenu.contains(evt.target)) {
+      hideContextMenu();
+    }
+  });
+
   // 侧边栏折叠/展开
   els.toggleSidebar.addEventListener("click", () => {
     els.sidebar.classList.toggle("collapsed");
@@ -678,16 +819,11 @@ function setupEvents() {
   els.sourceModalClose.addEventListener("click", closeSourceModal);
   els.sourceModalMask.addEventListener("click", closeSourceModal);
 
-  document.addEventListener("click", (evt) => {
-    if (!els.contextMenu.contains(evt.target)) {
-      hideContextMenu();
-    }
-  });
-
   document.addEventListener("keydown", (evt) => {
     if (evt.key === "Escape") {
       hideContextMenu();
       closeSourceModal();
+      hideAutocomplete();
     }
   });
 

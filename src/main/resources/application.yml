@@ -1,0 +1,21 @@
+server:
+  ssl:
+    key-store: classpath:account.jks
+    key-store-password: changeit
+    key-store-type: JKS
+    enabled: true
+  port: 8080
+  servlet:
+    context-path: /account
+
+spring:
+  sql:
+    init:
+      mode: never
+  datasource:
+    type: com.alibaba.druid.pool.DruidDataSource
+    platform: mysql
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://127.0.0.1:23306/account?useSSL=false&serverTimezone=UTC&useUnicode=true&characterEncoding=UTF-8&connectionCharacterEncoding=UTF-8&allowPublicKeyRetrieval=true
+    username: root
+    password: Lx@123456789
