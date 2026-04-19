@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, UploadFile, File
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
@@ -86,6 +86,37 @@ def api_strategies() -> dict:
     return {"items": list_strategies(settings.strategies_dir)}
 
 
+@app.post("/api/strategies/upload")
+async def api_strategy_upload(
+    file: UploadFile = File(...), session: Session = Depends(get_session)
+) -> dict:
+    """上传策略文件"""
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="文件名不能为空")
+    
+    filename = file.filename
+    if not filename.endswith(".py"):
+        raise HTTPException(status_code=400, detail="只支持 .py 文件")
+    
+    # 安全检查：防止路径遍历
+    safe_filename = Path(filename).name
+    if ".." in safe_filename or "/" in safe_filename or "\\" in safe_filename:
+        raise HTTPException(status_code=400, detail="无效的文件名")
+    
+    save_path = settings.strategies_dir / safe_filename
+    
+    content = await file.read()
+    
+    # 检查是否包含策略类
+    if b"class " not in content and b"bt.Strategy" not in content:
+        raise HTTPException(status_code=400, detail="文件不包含有效的策略类")
+    
+    # 写入文件
+    save_path.write_bytes(content)
+    
+    return {"id": safe_filename, "name": safe_filename[:-3], "message": "上传成功"}
+
+
 def _resolve_strategy_file(strategy_id: str) -> Path:
     base = settings.strategies_dir.resolve()
     path = (base / strategy_id).resolve()
@@ -113,6 +144,14 @@ def api_strategy_source(strategy_id: str) -> dict:
         "language": "python",
         "source": source,
     }
+
+
+@app.delete("/api/strategies/{strategy_id}")
+def api_strategy_delete(strategy_id: str) -> dict:
+    """删除策略文件"""
+    path = _resolve_strategy_file(strategy_id)
+    path.unlink()
+    return {"message": f"已删除 {strategy_id}"}
 
 
 @app.post("/api/backtest", response_model=BacktestResponse)

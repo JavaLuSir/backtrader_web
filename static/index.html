@@ -18,6 +18,12 @@
           <button id="toggleSidebar" class="toggle-btn" title="收起/展开">◀</button>
         </div>
         <div id="strategy-list" class="strategy-list"></div>
+        <div class="sidebar-footer">
+          <label class="upload-btn">
+            <input id="strategyUpload" type="file" accept=".py" style="display:none" />
+            <span>+ 上传策略</span>
+          </label>
+        </div>
       </aside>
 
       <main id="main">
@@ -80,6 +86,7 @@
     <div id="strategy-context-menu" class="context-menu hidden">
       <button id="contextRunBacktest" type="button">开始回测</button>
       <button id="contextViewSource" type="button">查看源代码</button>
+      <button id="contextDeleteStrategy" type="button" style="color:var(--danger)">删除策略</button>
     </div>
 
     <div id="source-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="source-modal-title">

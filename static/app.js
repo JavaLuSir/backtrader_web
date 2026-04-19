@@ -20,11 +20,13 @@ const els = {
   contextMenu: document.getElementById("strategy-context-menu"),
   contextRunBacktest: document.getElementById("contextRunBacktest"),
   contextViewSource: document.getElementById("contextViewSource"),
+  contextDeleteStrategy: document.getElementById("contextDeleteStrategy"),
   sourceModal: document.getElementById("source-modal"),
   sourceModalMask: document.getElementById("source-modal-mask"),
   sourceModalClose: document.getElementById("source-modal-close"),
   sourceTitle: document.getElementById("source-modal-title"),
   sourceCode: document.getElementById("source-code"),
+  strategyUpload: document.getElementById("strategyUpload"),
 };
 
 let selectedStrategyId = null;
@@ -790,6 +792,46 @@ function setupEvents() {
   els.symbol.addEventListener("input", handleSymbolInput);
   els.symbol.addEventListener("keydown", handleAutocompleteKeydown);
   
+  // 策略文件上传事件
+  els.strategyUpload.addEventListener("change", async (evt) => {
+    const file = evt.target.files[0];
+    if (!file) return;
+    
+    setStatus("上传中...");
+    
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      
+      const res = await fetch("/api/strategies/upload", {
+        method: "POST",
+        body: formData,
+      });
+      
+      const data = await res.json();
+      
+      if (!res.ok) {
+        setStatus(data.detail || "上传失败");
+        return;
+      }
+      
+      setStatus(`上传成功: ${file.name}`);
+      
+      // 重新加载策略列表
+      await loadStrategies();
+      
+      // 选中新上传的策略
+      const newId = data.id;
+      selectStrategy(newId);
+      
+    } catch (e) {
+      setStatus(String(e?.message || e));
+    }
+    
+    // 清空 input，允许重复上传同名文件
+    evt.target.value = "";
+  });
+  
   // 点击外部关闭自动补全
   document.addEventListener("click", (evt) => {
     if (!els.symbolAutocomplete.contains(evt.target) && !els.symbol.contains(evt.target)) {
@@ -816,6 +858,35 @@ function setupEvents() {
     runBacktest();
   });
   els.contextViewSource.addEventListener("click", openSourceModal);
+  
+  els.contextDeleteStrategy.addEventListener("click", async () => {
+    if (!contextStrategyId) return;
+    
+    if (!confirm(`确定要删除策略 "${contextStrategyId}" 吗？此操作不可恢复。`)) {
+      return;
+    }
+    
+    try {
+      const res = await fetch(`/api/strategies/${encodeURIComponent(contextStrategyId)}`, {
+        method: "DELETE",
+      });
+      
+      if (!res.ok) {
+        const data = await res.json();
+        setStatus(data.detail || "删除失败");
+        return;
+      }
+      
+      setStatus("删除成功");
+      
+      await loadStrategies();
+      
+      hideContextMenu();
+    } catch (e) {
+      setStatus(String(e?.message || e));
+    }
+  });
+  
   els.sourceModalClose.addEventListener("click", closeSourceModal);
   els.sourceModalMask.addEventListener("click", closeSourceModal);
 
