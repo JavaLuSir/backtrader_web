@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, HTTPException, UploadFile, File
+from fastapi import Depends, FastAPI, HTTPException, UploadFile, File, Request
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
@@ -152,6 +152,15 @@ def api_strategy_delete(strategy_id: str) -> dict:
     path = _resolve_strategy_file(strategy_id)
     path.unlink()
     return {"message": f"已删除 {strategy_id}"}
+
+
+@app.put("/api/strategies/{strategy_id}")
+async def api_strategy_update(strategy_id: str, request: Request) -> dict:
+    """更新策略文件源码"""
+    path = _resolve_strategy_file(strategy_id)
+    body = await request.body()
+    path.write_bytes(body)
+    return {"message": "保存成功"}
 
 
 @app.post("/api/backtest", response_model=BacktestResponse)

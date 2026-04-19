@@ -19,6 +19,7 @@ const els = {
   ma20Color: document.getElementById("ma20Color"),
   contextMenu: document.getElementById("strategy-context-menu"),
   contextRunBacktest: document.getElementById("contextRunBacktest"),
+  contextEditSource: document.getElementById("contextEditSource"),
   contextViewSource: document.getElementById("contextViewSource"),
   contextDeleteStrategy: document.getElementById("contextDeleteStrategy"),
   sourceModal: document.getElementById("source-modal"),
@@ -26,11 +27,17 @@ const els = {
   sourceModalClose: document.getElementById("source-modal-close"),
   sourceTitle: document.getElementById("source-modal-title"),
   sourceCode: document.getElementById("source-code"),
+  sourceEditor: document.getElementById("source-editor"),
+  sourceModalSave: document.getElementById("source-modal-save"),
+  editorHighlight: document.getElementById("editor-highlight"),
+  editorLoading: document.getElementById("editor-loading"),
   strategyUpload: document.getElementById("strategyUpload"),
 };
 
 let selectedStrategyId = null;
 let contextStrategyId = null;
+let editingStrategyId = null;
+let editingMode = false;
 let lastResult = null;
 let klineChart = null;
 let candleSeries = null;
@@ -343,20 +350,30 @@ function showContextMenu(x, y, strategyId) {
   menu.style.top = `${Math.max(8, top)}px`;
 }
 
+// 编辑器模式 - 可编辑
 function openSourceModal() {
   if (!contextStrategyId) return;
 
   const strategyId = contextStrategyId;
+  editingStrategyId = strategyId;
+  editingMode = true;
   hideContextMenu();
 
-  els.sourceTitle.textContent = `策略源码 - ${strategyId}`;
-  els.sourceCode.textContent = "加载中...";
+  els.sourceTitle.textContent = `编辑策略 - ${strategyId}`;
+  els.sourceEditor.classList.remove("hidden");
+  els.sourceCode.classList.add("hidden");
+  els.sourceModalSave.classList.remove("hidden");
   els.sourceModal.classList.remove("hidden");
   document.body.style.overflow = "hidden";
+  
+  // 显示加载动画
+  els.editorLoading.classList.remove("hidden");
+  els.sourceEditor.value = "";
+  els.sourceEditor.disabled = true;
 
   const cached = sourceCache.get(strategyId);
   if (cached) {
-    renderSourceCode(strategyId, cached);
+    renderEditorSource(strategyId, cached);
     return;
   }
 
@@ -371,19 +388,71 @@ function openSourceModal() {
     .then((data) => {
       const source = String(data?.source || "");
       sourceCache.set(strategyId, source);
-      renderSourceCode(strategyId, source);
+      renderEditorSource(strategyId, source);
     })
     .catch((err) => {
-      els.sourceCode.textContent = `加载失败：${err?.message || err}`;
+      els.sourceEditor.value = `加载失败：${err?.message || err}`;
     });
 }
 
-function renderSourceCode(strategyId, source) {
+// 只读查看模式 - 带高亮
+function openViewOnlyModal() {
+  if (!contextStrategyId) return;
+
+  const strategyId = contextStrategyId;
+  editingStrategyId = null;
+  editingMode = false;
+  hideContextMenu();
+
+  els.sourceTitle.textContent = `策略源码 - ${strategyId}`;
+  els.sourceCode.textContent = "加载中...";
+  els.sourceEditor.classList.add("hidden");
+  els.sourceCode.classList.remove("hidden");
+  els.sourceModalSave.classList.add("hidden");
+  els.sourceModal.classList.remove("hidden");
+  document.body.style.overflow = "hidden";
+
+  const cached = sourceCache.get(strategyId);
+  if (cached) {
+    renderReadOnlySource(strategyId, cached);
+    return;
+  }
+
+  fetch(`/api/strategies/source/${encodeURIComponent(strategyId)}`)
+    .then(async (res) => {
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.detail || "获取源码失败");
+      }
+      return res.json();
+    })
+    .then((data) => {
+      const source = String(data?.source || "");
+      sourceCache.set(strategyId, source);
+      renderEditorSource(strategyId, source);
+    })
+    .catch((err) => {
+      els.sourceEditor.value = `加载失败：${err?.message || err}`;
+    });
+}
+
+function renderEditorSource(strategyId, source) {
+  els.sourceTitle.textContent = `编辑策略 - ${strategyId}`;
+  els.editorLoading.classList.add("hidden");
+  els.sourceEditor.disabled = false;
+  els.sourceEditor.value = source;
+  
+  // 语法高亮 - textarea 透明叠加
+  if (window.hljs && window.hljs.highlight) {
+    highlightSource(source, els.editorHighlight);
+  }
+}
+
+function renderReadOnlySource(strategyId, source) {
   els.sourceTitle.textContent = `策略源码 - ${strategyId}`;
   
   if (window.hljs && window.hljs.highlight) {
-    const result = window.hljs.highlight(source, { language: "python" });
-    els.sourceCode.innerHTML = result.value;
+    highlightSource(source, els.sourceCode);
     els.sourceCode.className = "hljs language-python";
   } else {
     els.sourceCode.textContent = source;
@@ -391,9 +460,55 @@ function renderSourceCode(strategyId, source) {
   }
 }
 
+function highlightSource(source, element) {
+  if (!window.hljs) {
+    element.textContent = source;
+    return;
+  }
+  const result = window.hljs.highlight(source, { language: "python" });
+  element.innerHTML = result.value;
+}
+
+function saveSourceAndRunBacktest() {
+  if (!editingStrategyId) return;
+  
+  const newSource = els.sourceEditor.value;
+  
+  // 显示加载动画
+  els.editorLoading.classList.remove("hidden");
+  els.sourceEditor.disabled = true;
+  setStatus("保存中...");
+  
+  fetch(`/api/strategies/${encodeURIComponent(editingStrategyId)}`, {
+    method: "PUT",
+    body: newSource,
+  })
+    .then(async (res) => {
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.detail || "保存失败");
+      }
+      return res.json();
+    })
+    .then(() => {
+      sourceCache.set(editingStrategyId, newSource);
+      setStatus("保存成功，正在运行回测...");
+      
+      // 关闭弹窗并运行回测
+      closeSourceModal();
+      return runBacktest();
+    })
+    .catch((err) => {
+      els.editorLoading.classList.add("hidden");
+      els.sourceEditor.disabled = false;
+      setStatus(String(err?.message || err));
+    });
+}
+
 function closeSourceModal() {
   els.sourceModal.classList.add("hidden");
   document.body.style.overflow = "";
+  editingStrategyId = null;
 }
 
 async function loadStrategies() {
@@ -857,7 +972,15 @@ function setupEvents() {
     hideContextMenu();
     runBacktest();
   });
-  els.contextViewSource.addEventListener("click", openSourceModal);
+  els.contextEditSource.addEventListener("click", () => {
+    hideContextMenu();
+    openSourceModal(); // 编辑器模式
+  });
+  
+  els.contextViewSource.addEventListener("click", () => {
+    hideContextMenu();
+    openViewOnlyModal(); // 只读查看模式
+  });
   
   els.contextDeleteStrategy.addEventListener("click", async () => {
     if (!contextStrategyId) return;
@@ -889,7 +1012,18 @@ function setupEvents() {
   
   els.sourceModalClose.addEventListener("click", closeSourceModal);
   els.sourceModalMask.addEventListener("click", closeSourceModal);
-
+  
+  // 保存按钮 - Ctrl+S 快捷键
+  els.sourceEditor.addEventListener("keydown", (evt) => {
+    if ((evt.ctrlKey || evt.metaKey) && evt.key === "s") {
+      evt.preventDefault();
+      saveSourceAndRunBacktest();
+    }
+});
+   
+  // 保存按钮
+  els.sourceModalSave.addEventListener("click", saveSourceAndRunBacktest);
+  
   document.addEventListener("keydown", (evt) => {
     if (evt.key === "Escape") {
       hideContextMenu();

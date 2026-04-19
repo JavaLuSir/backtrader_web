@@ -17,13 +17,14 @@
           <div class="sidebar-title">策略列表</div>
           <button id="toggleSidebar" class="toggle-btn" title="收起/展开">◀</button>
         </div>
-        <div id="strategy-list" class="strategy-list"></div>
-        <div class="sidebar-footer">
+        <div class="sidebar-upload">
           <label class="upload-btn">
             <input id="strategyUpload" type="file" accept=".py" style="display:none" />
             <span>+ 上传策略</span>
           </label>
         </div>
+        <hr class="sidebar-divider" />
+        <div id="strategy-list" class="strategy-list"></div>
       </aside>
 
       <main id="main">
@@ -85,18 +86,29 @@
 
     <div id="strategy-context-menu" class="context-menu hidden">
       <button id="contextRunBacktest" type="button">开始回测</button>
+      <button id="contextEditSource" type="button">编辑代码</button>
       <button id="contextViewSource" type="button">查看源代码</button>
       <button id="contextDeleteStrategy" type="button" style="color:var(--danger)">删除策略</button>
     </div>
 
     <div id="source-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="source-modal-title">
       <div id="source-modal-mask" class="modal-mask"></div>
-      <div class="modal-content">
+      <div class="modal-content modal-content-editor">
         <div class="modal-header">
           <div id="source-modal-title">策略源码</div>
-          <button id="source-modal-close" class="icon-btn" type="button">关闭</button>
+          <div class="modal-actions">
+            <button id="source-modal-save" class="primary" type="button">保存</button>
+            <button id="source-modal-close" class="icon-btn" type="button">关闭</button>
+          </div>
         </div>
-        <pre class="code-block"><code id="source-code" class="language-python"></code></pre>
+        <div id="editor-wrapper" class="editor-wrapper">
+          <textarea id="source-editor" class="source-editor" spellcheck="false"></textarea>
+          <pre id="editor-highlight" class="editor-highlight"></pre>
+        </div>
+        <div id="editor-loading" class="editor-loading hidden">
+          <div class="spinner"></div>
+          <span>保存中...</span>
+        </div>
       </div>
     </div>
 
