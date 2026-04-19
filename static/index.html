@@ -1,120 +1,119 @@
 <!doctype html>
 <html lang="zh-CN">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Backtrader Web</title>
-    <link rel="stylesheet" href="/static/styles.css" />
-    <link
-      rel="stylesheet"
-      href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css"
-    />
-  </head>
-  <body>
-    <div id="app">
-      <aside id="sidebar">
-        <div class="sidebar-header">
-          <div class="sidebar-title">策略列表</div>
-          <button id="toggleSidebar" class="toggle-btn" title="收起/展开">◀</button>
-        </div>
-        <div class="sidebar-upload">
-          <label class="upload-btn">
-            <input id="strategyUpload" type="file" accept=".py" style="display:none" />
-            <span>+ 上传策略</span>
-          </label>
-        </div>
-        <hr class="sidebar-divider" />
-        <div id="strategy-list" class="strategy-list"></div>
-      </aside>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Backtrader Web</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+  <link rel="stylesheet" href="/static/github-dark.min.css" />
+</head>
+<body>
+  <div id="app">
+    <aside id="sidebar">
+      <div class="sidebar-header">
+        <div class="sidebar-title">策略列表</div>
+        <button id="toggleSidebar" class="toggle-btn" title="收起/展开">◀</button>
+      </div>
+      <div class="sidebar-upload">
+        <label class="upload-btn">
+          <input id="strategyUpload" type="file" accept=".py" style="display:none" />
+          <span>+ 上传策略</span>
+        </label>
+      </div>
+      <hr class="sidebar-divider" />
+      <div id="strategy-list" class="strategy-list"></div>
+    </aside>
 
-      <main id="main">
-        <section id="controls">
-          <div class="control-row">
-            <label class="control control-autocomplete">
-              <span>股票代码</span>
-              <div class="autocomplete-wrapper">
-                <input id="symbol" type="text" value="AAPL" placeholder="输入代码或名称" autocomplete="off" />
-                <div id="symbolAutocomplete" class="autocomplete-dropdown"></div>
-              </div>
-            </label>
-
-            <label class="control">
-              <span>资金金额</span>
-              <input id="cash" type="number" step="100" value="100000" />
-            </label>
-
-            <label class="control">
-              <span>开始时间</span>
-              <input id="startDate" type="date" />
-            </label>
-
-            <label class="control">
-              <span>结束时间</span>
-              <input id="endDate" type="date" />
-            </label>
-
-            <button id="runBtn" class="primary">开始回测</button>
-            <div class="ma-settings">
-              <span class="ma-label">MA5</span>
-              <input id="ma5Color" type="color" value="#ff9500" title="MA5颜色">
-              <span class="ma-label">MA10</span>
-              <input id="ma10Color" type="color" value="#5ac8fa" title="MA10颜色">
-              <span class="ma-label">MA20</span>
-              <input id="ma20Color" type="color" value="#af52de" title="MA20颜色">
+    <main id="main">
+      <section id="controls">
+        <div class="control-row">
+          <label class="control control-autocomplete">
+            <span>股票代码</span>
+            <div class="autocomplete-wrapper">
+              <input id="symbol" type="text" value="AAPL" placeholder="输入代码或名称" autocomplete="off" />
+              <div id="symbolAutocomplete" class="autocomplete-dropdown"></div>
             </div>
-          </div>
+          </label>
 
-          <div class="meta-row">
-            <div id="status" class="status">准备就绪</div>
-            <div id="metrics" class="metrics"></div>
-            <button id="exportBtn" class="secondary" disabled>导出交易CSV</button>
-          </div>
-        </section>
+          <label class="control">
+            <span>资金金额</span>
+            <input id="cash" type="number" step="100" value="100000" />
+          </label>
 
-        <section id="chart-section">
-          <div id="kline-wrapper">
-            <div id="kline-legend"></div>
-            <div id="kline-container"></div>
-          </div>
-          <div id="equity-container">
-            <div class="chart-title">资金曲线</div>
-            <canvas id="chart"></canvas>
-          </div>
-        </section>
-      </main>
-    </div>
+          <label class="control">
+            <span>开始时间</span>
+            <input id="startDate" type="date" />
+          </label>
 
-    <div id="strategy-context-menu" class="context-menu hidden">
-      <button id="contextRunBacktest" type="button">开始回测</button>
-      <button id="contextEditSource" type="button">编辑代码</button>
-      <button id="contextViewSource" type="button">查看源代码</button>
-      <button id="contextDeleteStrategy" type="button" style="color:var(--danger)">删除策略</button>
-    </div>
+          <label class="control">
+            <span>结束时间</span>
+            <input id="endDate" type="date" />
+          </label>
 
-    <div id="source-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="source-modal-title">
-      <div id="source-modal-mask" class="modal-mask"></div>
-      <div class="modal-content modal-content-editor">
-        <div class="modal-header">
-          <div id="source-modal-title">策略源码</div>
-          <div class="modal-actions">
-            <button id="source-modal-save" class="primary" type="button">保存</button>
-            <button id="source-modal-close" class="icon-btn" type="button">关闭</button>
+          <button id="runBtn" class="primary">开始回测</button>
+          <div class="ma-settings">
+            <span class="ma-label">MA5</span>
+            <input id="ma5Color" type="color" value="#ff9500" title="MA5颜色">
+            <span class="ma-label">MA10</span>
+            <input id="ma10Color" type="color" value="#5ac8fa" title="MA10颜色">
+            <span class="ma-label">MA20</span>
+            <input id="ma20Color" type="color" value="#af52de" title="MA20颜色">
           </div>
         </div>
-        <div id="editor-wrapper" class="editor-wrapper">
-          <textarea id="source-editor" class="source-editor" spellcheck="false"></textarea>
-          <pre id="editor-highlight" class="editor-highlight"></pre>
+
+        <div class="meta-row">
+          <div id="status" class="status">准备就绪</div>
+          <div id="metrics" class="metrics"></div>
+          <button id="exportBtn" class="secondary" disabled>导出交易CSV</button>
         </div>
-        <div id="editor-loading" class="editor-loading hidden">
-          <div class="spinner"></div>
-          <span>保存中...</span>
+      </section>
+
+      <section id="chart-section">
+        <div id="kline-wrapper">
+          <div id="kline-legend"></div>
+          <div id="kline-container"></div>
+        </div>
+        <div id="equity-container">
+          <div class="chart-title">资金曲线</div>
+          <canvas id="chart"></canvas>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- 右键菜单 -->
+  <div id="strategy-context-menu" class="context-menu hidden">
+    <button id="btnBacktest">开始回测</button>
+    <button id="btnEdit">编辑代码</button>
+    <button id="btnView">查看源代码</button>
+    <button id="btnDelete" style="color:var(--danger)">删除策略</button>
+  </div>
+
+  <!-- 源码弹窗 -->
+  <div id="source-modal" class="modal hidden">
+    <div id="source-modal-mask" class="modal-mask"></div>
+    <div class="modal-content modal-content-editor">
+      <div class="modal-header">
+        <div id="source-modal-title">策略源码</div>
+        <div class="modal-actions">
+          <button id="source-modal-save" class="primary">保存</button>
+          <button id="source-modal-close" class="icon-btn">关闭</button>
         </div>
       </div>
+      <div id="editor-wrapper" class="editor-wrapper">
+        <textarea id="source-editor" class="source-editor" spellcheck="false"></textarea>
+        <pre id="editor-highlight" class="editor-highlight"></pre>
+      </div>
+      <div id="editor-loading" class="editor-loading hidden">
+        <div class="spinner"></div>
+        <span>保存中...</span>
+      </div>
     </div>
+  </div>
 
-    <script src="https://unpkg.com/lightweight-charts@4.1.0/dist/lightweight-charts.standalone.production.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/python.min.js"></script>
-    <script src="/static/app.js"></script>
-  </body>
+  <!-- 本地库 -->
+  <script src="/static/lightweight-charts.js"></script>
+  <script src="/static/highlight.min.js"></script>
+  <script src="/static/app.js"></script>
+</body>
 </html>
