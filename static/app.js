@@ -388,7 +388,7 @@ function openSourceModal() {
     .then((data) => {
       const source = String(data?.source || "");
       sourceCache.set(strategyId, source);
-      renderEditorSource(strategyId, source);
+      renderReadOnlySource(strategyId, source);
     })
     .catch((err) => {
       els.sourceEditor.value = `加载失败：${err?.message || err}`;
@@ -429,7 +429,7 @@ function openViewOnlyModal() {
     .then((data) => {
       const source = String(data?.source || "");
       sourceCache.set(strategyId, source);
-      renderEditorSource(strategyId, source);
+      renderReadOnlySource(strategyId, source);
     })
     .catch((err) => {
       els.sourceEditor.value = `加载失败：${err?.message || err}`;
@@ -969,21 +969,16 @@ function setupEvents() {
   });
 
   els.contextRunBacktest.addEventListener("click", () => {
-    console.log("contextRunBacktest clicked");
     hideContextMenu();
     runBacktest();
   });
   
-  console.log("Adding contextEditSource listener, element:", els.contextEditSource);
   els.contextEditSource.addEventListener("click", () => {
-    console.log("contextEditSource clicked, contextStrategyId:", contextStrategyId);
     hideContextMenu();
     openSourceModal(); // 编辑器模式
   });
   
-  console.log("Adding contextViewSource listener, element:", els.contextViewSource);
   els.contextViewSource.addEventListener("click", () => {
-    console.log("contextViewSource clicked, contextStrategyId:", contextStrategyId);
     hideContextMenu();
     openViewOnlyModal(); // 只读查看模式
   });

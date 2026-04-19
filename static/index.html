@@ -116,26 +116,5 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/python.min.js"></script>
     <script src="/static/app.js"></script>
-    <script>
-        // 补丁：确保右键菜单按钮响应点击
-        setTimeout(function() {
-            var editBtn = document.getElementById('contextEditSource');
-            var viewBtn = document.getElementById('contextViewSource');
-            
-            if (editBtn) {
-                editBtn.onclick = function(e) {
-                    console.log("Edit button clicked via onclick patch");
-                    // 模拟触发编辑功能
-                    document.getElementById('source-modal').classList.remove('hidden');
-                };
-            }
-            
-            if (viewBtn) {
-                viewBtn.onclick = function(e) {
-                    console.log("View button clicked via onclick patch");
-                };
-            }
-        }, 500);
-    </script>
   </body>
 </html>
