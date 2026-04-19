@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8" />
+    <title>Test Page</title>
+</head>
+<body>
+    <h1>Test Page</h1>
+    <button id="testBtn">Click Me</button>
+    <div id="output"></div>
+    <script>
+        document.getElementById('testBtn').addEventListener('click', function() {
+            document.getElementById('output').textContent = 'Button clicked!';
+        });
+    </script>
+</body>
+</html>
