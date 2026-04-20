@@ -55,7 +55,24 @@ python scripts\import_stock_info.py --csv stocks.csv
 python scripts\import_stock_info.py --list
 ```
 
-详细说明请查看：[AUTO_COMPLETE_README.md](AUTO_COMPLETE_README.md)
+### 股票自动补全
+
+在股票代码输入框中，当您输入股票代码或名称时，系统会自动搜索并显示匹配的股票列表供选择。
+
+**使用方式**：
+- 鼠标点击选择
+- 键盘 `↑` `↓` 方向键选择，`Enter` 确认
+- `Esc` 关闭下拉列表
+
+**股票代码格式**：
+- 美股：直接代码，如 `AAPL`
+- A 股：需要后缀，如 `600000.SS`（上交所）、`000001.SZ`（深交所）
+- 港股：需要 `.HK` 后缀，如 `0700.HK`
+
+**API 接口**：
+```
+GET /api/stocks?q={搜索关键词}&limit={返回数量}
+```
 
 ## 4) 采集数据（示例：AAPL 近 10 年日 K）
 
