@@ -20,4 +20,6 @@ venv/
 .DS_Store
 Thumbs.db*.log
 uvicorn.*.log
+btweb.start.*.log
+server.log
 __pycache__/
