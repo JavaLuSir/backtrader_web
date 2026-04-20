@@ -1,1057 +1,731 @@
-const els = {
-  list: document.getElementById("strategy-list"),
-  sidebar: document.getElementById("sidebar"),
-  toggleSidebar: document.getElementById("toggleSidebar"),
-  symbol: document.getElementById("symbol"),
-  symbolAutocomplete: document.getElementById("symbolAutocomplete"),
-  cash: document.getElementById("cash"),
-  startDate: document.getElementById("startDate"),
-  endDate: document.getElementById("endDate"),
-  runBtn: document.getElementById("runBtn"),
-  exportBtn: document.getElementById("exportBtn"),
-  status: document.getElementById("status"),
-  metrics: document.getElementById("metrics"),
-  canvas: document.getElementById("chart"),
-  klineContainer: document.getElementById("kline-container"),
-  klineLegend: document.getElementById("kline-legend"),
-  ma5Color: document.getElementById("ma5Color"),
-  ma10Color: document.getElementById("ma10Color"),
-  ma20Color: document.getElementById("ma20Color"),
-  contextRunBacktest: document.getElementById("btnBacktest"),
-  contextMenu: document.getElementById("strategy-context-menu"),
-  contextEditSource: document.getElementById("btnEdit"),
-  contextViewSource: document.getElementById("btnView"),
-  contextDeleteStrategy: document.getElementById("btnDelete"),
-  sourceModal: document.getElementById("source-modal"),
-  sourceModalMask: document.getElementById("source-modal-mask"),
-  sourceModalClose: document.getElementById("source-modal-close"),
-  sourceTitle: document.getElementById("source-modal-title"),
-  sourceCode: document.getElementById("source-code"),
-  sourceEditor: document.getElementById("source-editor"),
-  sourceModalSave: document.getElementById("source-modal-save"),
-  editorHighlight: document.getElementById("editor-highlight"),
-  editorLoading: document.getElementById("editor-loading"),
-  strategyUpload: document.getElementById("strategyUpload"),
-};
+// Backtrader Web
+const els = {};
 
-let selectedStrategyId = null;
-let contextStrategyId = null;
-let editingStrategyId = null;
-let editingMode = false;
-let lastResult = null;
-let klineChart = null;
-let candleSeries = null;
-let volumeSeries = null;
-let maSeries = {};
+function init() {
+  // Get elements
+  els.list = document.getElementById("strategy-list");
+  els.sidebar = document.getElementById("sidebar");
+  els.toggleSidebar = document.getElementById("toggleSidebar");
+  els.symbol = document.getElementById("symbol");
+  els.cash = document.getElementById("cash");
+  els.startDate = document.getElementById("startDate");
+  els.endDate = document.getElementById("endDate");
+  els.runBtn = document.getElementById("runBtn");
+  els.exportBtn = document.getElementById("exportBtn");
+  els.status = document.getElementById("status");
+  els.metrics = document.getElementById("metrics");
+  els.canvas = document.getElementById("chart");
+  els.klineContainer = document.getElementById("kline-container");
+  els.contextMenu = document.getElementById("strategy-context-menu");
+  els.contextRunBacktest = document.getElementById("btnBacktest");
+  els.contextEditSource = document.getElementById("btnEdit");
+  els.contextViewSource = document.getElementById("btnView");
+  els.contextDownloadStrategy = document.getElementById("btnDownload");
+  els.contextDeleteStrategy = document.getElementById("btnDelete");
+  els.sourceModal = document.getElementById("source-modal");
+  els.sourceModalMask = document.getElementById("source-modal-mask");
+  els.sourceModalClose = document.getElementById("source-modal-close");
+  els.sourceTitle = document.getElementById("source-modal-title");
+  els.sourceCode = document.getElementById("source-code-view");
+  els.sourceEditor = document.getElementById("source-editor");
+  els.sourceModalSave = document.getElementById("source-modal-save");
+  els.editorLoading = document.getElementById("editor-loading");
+  els.strategyUpload = document.getElementById("strategyUpload");
+  els.symbolAutocomplete = document.getElementById("symbolAutocomplete");
+  els.klineMetrics = document.getElementById("kline-metrics");
+  els.equityMetrics = document.getElementById("equity-metrics");
+  els.editorHighlight = document.getElementById("editor-highlight");
 
-// 自动补全相关变量
-let autocompleteItems = null;
-let autocompleteActiveIndex = -1;
-let autocompleteTimer = null;
+  console.log("Elements loaded");
+  console.log("btnEdit:", document.getElementById("btnEdit"));
+  console.log("btnView:", document.getElementById("btnView"));
+  console.log("hljs:", typeof hljs);
+  console.log("hljs.highlight:", typeof (hljs && hljs.highlight));
 
-function getMaConfig() {
-  return [
-    { period: 5, color: els.ma5Color.value, label: "MA5" },
-    { period: 10, color: els.ma10Color.value, label: "MA10" },
-    { period: 20, color: els.ma20Color.value, label: "MA20" },
-  ];
-}
-
-const sourceCache = new Map();
-
-function isoDate(d) {
-  const pad = (n) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-}
-
-function setDefaultDates() {
-  const end = new Date();
-  const start = new Date(end.getTime());
+  // Set default dates
+  var end = new Date();
+  var start = new Date(end.getTime());
   start.setFullYear(end.getFullYear() - 10);
-  els.startDate.value = isoDate(start);
-  els.endDate.value = isoDate(end);
+  els.startDate.value = formatDate(start);
+  els.endDate.value = formatDate(end);
+
+  // Setup events
+  setupEvents();
+
+  // Load strategies
+  loadStrategies();
 }
 
-function setStatus(text) {
-  els.status.textContent = text;
-}
-
-function formatMoney(x) {
-  if (!Number.isFinite(x)) return "-";
-  return x.toLocaleString(undefined, { maximumFractionDigits: 2 });
-}
-
-function renderMetrics(metrics) {
-  if (!metrics) {
-    els.metrics.textContent = "";
-    return;
-  }
-
-  const fmtPct = (x) => (Number.isFinite(Number(x)) ? `${Number(x).toFixed(2)}%` : "-");
-  const fmtRatio = (x) => (Number.isFinite(Number(x)) ? Number(x).toFixed(3) : "-");
-
-  const parts = [
-    `策略：${metrics.strategy}`,
-    `期初：${formatMoney(metrics.start_cash)}`,
-    `期末：${formatMoney(metrics.end_value)}`,
-    `收益：${formatMoney(metrics.pnl)} (${fmtPct(metrics.return_pct)})`,
-    `年化：${fmtPct(metrics.annual_return_pct)}`,
-    `夏普：${fmtRatio(metrics.sharpe)}`,
-    `索提诺：${fmtRatio(metrics.sortino)}`,
-    `最大回撤：${fmtPct(metrics.max_drawdown_pct)}`,
-    `胜率：${fmtPct(metrics.win_rate_pct)}`,
-    `盈亏比：${fmtRatio(metrics.avg_win_loss_ratio)}`,
-    `卡尔马：${fmtRatio(metrics.calmar)}`,
-    `买/卖：${metrics.buy_count}/${metrics.sell_count}`,
-  ];
-
-  els.metrics.textContent = parts.join(" | ");
-}
-
-function escapeHtml(text) {
-  if (!text) return "";
-  const div = document.createElement("div");
-  div.textContent = text;
-  return div.innerHTML;
-}
-
-function fmtNum(x, digits = 2) {
-  const n = Number(x);
-  return Number.isFinite(n) ? n.toFixed(digits) : "";
-}
-
-function safeFilename(s) {
-  return String(s || "export.csv")
-    .replace(/[<>:"/\\|?*]+/g, "_")
-    .replace(/\s+/g, "_");
-}
-
-function makeTradesCsv(result) {
-  const metrics = result?.metrics || {};
-  const symbol = metrics.symbol || "";
-  const strategy = metrics.strategy || "";
-  const start = metrics.start_date || "";
-  const end = metrics.end_date || "";
-
-  const trades = [...(result?.buys || []), ...(result?.sells || [])];
-  trades.sort(
-    (a, b) =>
-      String(a.date || "").localeCompare(String(b.date || "")) ||
-      String(a.action || "").localeCompare(String(b.action || ""))
-  );
-
-  const headers = [
-    "symbol",
-    "strategy",
-    "start_date",
-    "end_date",
-    "date",
-    "action",
-    "price",
-    "size",
-    "cash",
-    "value",
-    "position_size",
-  ];
-  const lines = [headers.join(",")];
-
-  for (const t of trades) {
-    const row = [
-      symbol,
-      strategy,
-      start,
-      end,
-      t.date || "",
-      t.action || "",
-      fmtNum(t.price, 4),
-      fmtNum(t.size, 6),
-      fmtNum(t.cash, 2),
-      fmtNum(t.value, 2),
-      fmtNum(t.position_size, 6),
-    ].map(escapeCsv);
-    lines.push(row.join(","));
-  }
-
-  return lines.join("\n");
-}
-
-function escapeCsv(v) {
-  if (v === null || v === undefined) return "";
-  const s = String(v);
-  if (/[",\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
-  return s;
-}
-
-function downloadTextFile(filename, text, mimeType) {
-  const blob = new Blob([text], { type: mimeType || "text/plain;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 500);
-}
-
-function exportTradesCsv() {
-  if (!lastResult || !lastResult.metrics) {
-    setStatus("暂无可导出的回测结果");
-    return;
-  }
-  const m = lastResult.metrics;
-  const filename = safeFilename(
-    `${m.symbol || "SYMBOL"}_${m.strategy || "strategy"}_${m.start_date || ""}_${m.end_date || ""}_trades.csv`
-  );
-  const csv = makeTradesCsv(lastResult);
-  downloadTextFile(filename, csv, "text/csv;charset=utf-8");
-}
-
-function clearListActive() {
-  els.list.querySelectorAll(".strategy-item").forEach((n) => n.classList.remove("active"));
-}
-
-function selectStrategy(id) {
-  selectedStrategyId = id;
-  clearListActive();
-  const node = els.list.querySelector(`[data-id="${CSS.escape(id)}"]`);
-  if (node) node.classList.add("active");
+function formatDate(d) {
+  var pad = function(n) { return String(n).padStart(2, "0"); };
+  return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate());
 }
 
 function hideContextMenu() {
-  els.contextMenu.classList.add("hidden");
-  contextStrategyId = null;
+  if (els.contextMenu) els.contextMenu.classList.add("hidden");
 }
-
-// ========== 自动补全功能 ==========
-
-function hideAutocomplete() {
-  els.symbolAutocomplete.classList.remove("show");
-  autocompleteItems = null;
-  autocompleteActiveIndex = -1;
-}
-
-function renderAutocomplete(items) {
-  if (!items || items.length === 0) {
-    els.symbolAutocomplete.innerHTML = '<div class="autocomplete-empty">未找到匹配的股票</div>';
-    return;
-  }
-
-  els.symbolAutocomplete.innerHTML = items
-    .map((item, index) => `
-        <div class="autocomplete-item ${index === autocompleteActiveIndex ? 'active' : ''}" 
-             data-index="${index}">
-          <strong>${escapeHtml(item.symbol)}</strong>
-          <span style="color:var(--muted); margin-left:8px">${escapeHtml(item.name)}</span>
-          ${item.exchange ? `<span style="color:var(--muted); opacity:0.7; margin-left:6px">(${escapeHtml(item.exchange)})</span>` : ''}
-        </div>
-      `)
-    .join("");
-
-  // 绑定点击事件
-  els.symbolAutocomplete.querySelectorAll(".autocomplete-item").forEach((el) => {
-    el.addEventListener("click", () => {
-      const index = parseInt(el.dataset.index, 10);
-      selectAutocompleteItem(items[index]);
-    });
-  });
-}
-
-function selectAutocompleteItem(item) {
-  if (!item) return;
-  els.symbol.value = item.symbol;
-  hideAutocomplete();
-  els.symbol.focus();
-}
-
-async function searchStocks(query) {
-  try {
-    const params = new URLSearchParams({
-      q: query,
-      limit: "20",
-    });
-    const res = await fetch(`/api/stocks?${params}`);
-    if (!res.ok) return [];
-    return await res.json();
-  } catch (e) {
-    console.error("搜索股票失败:", e);
-    return [];
-  }
-}
-
-async function handleSymbolInput() {
-  const query = els.symbol.value.trim();
-
-  if (!query) {
-    hideAutocomplete();
-    return;
-  }
-
-  // 清除之前的定时器
-  if (autocompleteTimer) {
-    clearTimeout(autocompleteTimer);
-  }
-
-  // 设置新的定时器（300ms 防抖）
-  autocompleteTimer = setTimeout(async () => {
-    const items = await searchStocks(query);
-    autocompleteItems = items;
-    autocompleteActiveIndex = -1;
-
-    if (items.length > 0) {
-      renderAutocomplete(items);
-      els.symbolAutocomplete.classList.add("show");
-    } else {
-      hideAutocomplete();
-    }
-  }, 300);
-}
-
-function handleAutocompleteKeydown(e) {
-  if (!els.symbolAutocomplete.classList.contains("show")) {
-    return;
-  }
-
-  if (e.key === "ArrowDown") {
-    e.preventDefault();
-    if (autocompleteActiveIndex < autocompleteItems.length - 1) {
-      autocompleteActiveIndex++;
-      renderAutocomplete(autocompleteItems);
-    }
-  } else if (e.key === "ArrowUp") {
-    e.preventDefault();
-    if (autocompleteActiveIndex > 0) {
-      autocompleteActiveIndex--;
-      renderAutocomplete(autocompleteItems);
-    }
-  } else if (e.key === "Enter") {
-    e.preventDefault();
-    if (autocompleteActiveIndex >= 0 && autocompleteActiveIndex < autocompleteItems.length) {
-      selectAutocompleteItem(autocompleteItems[autocompleteActiveIndex]);
-    }
-  } else if (e.key === "Escape") {
-    hideAutocomplete();
-    autocompleteTimer = null;
-  }
-}
-
-// ========== 辅助函数 ==========
 
 function showContextMenu(x, y, strategyId) {
   contextStrategyId = strategyId;
-  const menu = els.contextMenu;
+  var menu = els.contextMenu;
+  
+  // 先显示菜单获取正确尺寸
   menu.classList.remove("hidden");
-
-  const rect = menu.getBoundingClientRect();
-  const left = Math.min(x, window.innerWidth - rect.width - 8);
-  const top = Math.min(y, window.innerHeight - rect.height - 8);
-
-  menu.style.left = `${Math.max(8, left)}px`;
-  menu.style.top = `${Math.max(8, top)}px`;
+  
+  var rect = menu.getBoundingClientRect();
+  var left = Math.min(x, window.innerWidth - rect.width - 8);
+  var top = Math.min(y, window.innerHeight - rect.height - 8);
+  
+  // 延迟设置位置确保可见
+  setTimeout(function() {
+    menu.style.left = Math.max(10, left) + "px";
+    menu.style.top = Math.max(10, top) + "px";
+  }, 10);
 }
 
-// 编辑器模式 - 可编辑
-function openSourceModal() {
-  if (!contextStrategyId) return;
+var contextStrategyId = null;
+var selectedStrategyId = null;
 
-  const strategyId = contextStrategyId;
-  editingStrategyId = strategyId;
-  editingMode = true;
-  hideContextMenu();
-
-  els.sourceTitle.textContent = `编辑策略 - ${strategyId}`;
-  els.sourceEditor.classList.remove("hidden");
-  els.sourceCode.classList.add("hidden");
-  els.sourceModalSave.classList.remove("hidden");
-  els.sourceModal.classList.remove("hidden");
-  document.body.style.overflow = "hidden";
-  
-  // 显示加载动画
-  els.editorLoading.classList.remove("hidden");
-  els.sourceEditor.value = "";
-  els.sourceEditor.disabled = true;
-
-  const cached = sourceCache.get(strategyId);
-  if (cached) {
-    renderEditorSource(strategyId, cached);
-    return;
-  }
-
-  fetch(`/api/strategies/source/${encodeURIComponent(strategyId)}`)
-    .then(async (res) => {
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.detail || "获取源码失败");
+function loadStrategies() {
+  fetch("/api/strategies")
+    .then(function(res) { return res.json(); })
+    .then(function(data) {
+      els.list.innerHTML = "";
+      var items = data.items || [];
+      for (var i = 0; i < items.length; i++) {
+        var item = items[i];
+        var div = document.createElement("div");
+        div.className = "strategy-item";
+        div.dataset.id = item.id;
+        div.innerHTML = "<div class='strategy-name'>" + item.name + "</div><div class='strategy-id'>" + item.id + "</div>";
+        
+        // Click to select - store current item
+        div.addEventListener("click", (function(itemId) {
+          return function() {
+            console.log("Click on:", itemId);
+            setActive(itemId);
+          };
+        })(item.id));
+        
+        // Right click to show menu
+        div.addEventListener("contextmenu", (function(itemId) {
+          return function(evt) {
+            evt.preventDefault();
+            setActive(itemId);
+            showContextMenu(evt.clientX, evt.clientY, itemId);
+          };
+        })(item.id));
+        
+        els.list.appendChild(div);
       }
-      return res.json();
-    })
-    .then((data) => {
-      const source = String(data?.source || "");
-      sourceCache.set(strategyId, source);
-      renderReadOnlySource(strategyId, source);
-    })
-    .catch((err) => {
-      els.sourceEditor.value = `加载失败：${err?.message || err}`;
+      if (items.length > 0) {
+        setActive(items[0].id);
+      }
     });
 }
 
-// 只读查看模式 - 带高亮
-function openViewOnlyModal() {
-  if (!contextStrategyId) return;
+function setActive(id) {
+  // Remove active from all
+  var nodes = els.list.querySelectorAll(".strategy-item");
+  for (var i = 0; i < nodes.length; i++) {
+    nodes[i].classList.remove("active");
+  }
+  // Add active to selected
+  var node = els.list.querySelector('[data-id="' + id + '"]');
+  if (node) {
+    node.classList.add("active");
+  }
+  selectedStrategyId = id;
+  console.log("Selected:", id);
+}
 
-  const strategyId = contextStrategyId;
-  editingStrategyId = null;
-  editingMode = false;
-  hideContextMenu();
-
-  els.sourceTitle.textContent = `策略源码 - ${strategyId}`;
-  els.sourceCode.textContent = "加载中...";
-  els.sourceEditor.classList.add("hidden");
-  els.sourceCode.classList.remove("hidden");
-  els.sourceModalSave.classList.add("hidden");
-  els.sourceModal.classList.remove("hidden");
-  document.body.style.overflow = "hidden";
-
-  const cached = sourceCache.get(strategyId);
-  if (cached) {
-    renderReadOnlySource(strategyId, cached);
-    return;
+function setupEvents() {
+  // Toggle sidebar
+  if (els.toggleSidebar) {
+    els.toggleSidebar.addEventListener("click", function() {
+      els.sidebar.classList.toggle("collapsed");
+      els.toggleSidebar.textContent = els.sidebar.classList.contains("collapsed") ? "▶" : "◀";
+    });
   }
 
-  fetch(`/api/strategies/source/${encodeURIComponent(strategyId)}`)
-    .then(async (res) => {
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.detail || "获取源码失败");
+  // Symbol autocomplete
+  var acTimer = null;
+  var acItems = [];
+  var acIndex = -1;
+  
+  function hideAc() {
+    if (els.symbolAutocomplete) els.symbolAutocomplete.classList.remove("show");
+    acItems = [];
+    acIndex = -1;
+  }
+  
+  function renderAc(items) {
+    if (!els.symbolAutocomplete) return;
+    if (!items || items.length === 0) {
+      hideAc();
+      return;
+    }
+    els.symbolAutocomplete.innerHTML = items.map(function(item, i) {
+      return '<div class="autocomplete-item' + (i === acIndex ? ' active' : '') + '" data-index="' + i + '">' + item.symbol + ' - ' + item.name + '</div>';
+    }).join("");
+    els.symbolAutocomplete.querySelectorAll(".autocomplete-item").forEach(function(el) {
+      el.addEventListener("click", function() {
+        var idx = parseInt(el.dataset.index, 10);
+        if (acItems[idx]) {
+          els.symbol.value = acItems[idx].symbol;
+          hideAc();
+        }
+      });
+    });
+    els.symbolAutocomplete.classList.add("show");
+  }
+  
+  function searchStocks(query, callback) {
+    fetch("/api/stocks?q=" + encodeURIComponent(query))
+      .then(function(res) { return res.json(); })
+      .then(function(data) {
+        var items = Array.isArray(data) ? data : (data.items || []);
+        callback(items);
+      })
+      .catch(function() { callback([]); });
+  }
+  
+  if (els.symbol) {
+    els.symbol.addEventListener("input", function() {
+      var query = els.symbol.value.trim().toUpperCase();
+      if (!query) { hideAc(); return; }
+      if (acTimer) clearTimeout(acTimer);
+      acTimer = setTimeout(function() {
+        searchStocks(query, function(items) {
+          acItems = items.slice(0, 10);
+          acIndex = -1;
+          if (acItems.length > 0) renderAc(acItems);
+          else hideAc();
+        });
+      }, 200);
+    });
+    els.symbol.addEventListener("keydown", function(e) {
+      if (!els.symbolAutocomplete || !els.symbolAutocomplete.classList.contains("show")) return;
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        if (acIndex < acItems.length - 1) { acIndex++; renderAc(acItems); }
+      } else if (e.key === "ArrowUp") {
+        e.preventDefault();
+        if (acIndex > 0) { acIndex--; renderAc(acItems); }
+      } else if (e.key === "Enter") {
+        e.preventDefault();
+        if (acIndex >= 0 && acItems[acIndex]) {
+          els.symbol.value = acItems[acIndex].symbol;
+          hideAc();
+          runBacktest();
+        } else if (acItems.length > 0 && els.symbol.value.trim()) {
+          runBacktest();
+        }
+      } else if (e.key === "Escape") {
+        hideAc();
       }
-      return res.json();
-    })
-    .then((data) => {
-      const source = String(data?.source || "");
-      sourceCache.set(strategyId, source);
-      renderReadOnlySource(strategyId, source);
-    })
-    .catch((err) => {
-      els.sourceEditor.value = `加载失败：${err?.message || err}`;
+    });
+    document.addEventListener("click", function(e) {
+      if (!els.symbol.contains(e.target) && !els.symbolAutocomplete.contains(e.target)) {
+        hideAc();
+      }
+    });
+  }
+
+  els.runBtn.addEventListener("click", runBacktest);
+
+  // Right click menu buttons - onclick instead of addEventListener
+  if (els.contextRunBacktest) {
+    els.contextRunBacktest.onclick = function() {
+      hideContextMenu();
+      runBacktest();
+    };
+  }
+
+  if (els.contextEditSource) {
+    els.contextEditSource.onclick = function() {
+      hideContextMenu();
+      openEditor();
+    };
+  }
+
+  if (els.contextViewSource) {
+    els.contextViewSource.onclick = function() {
+      hideContextMenu();
+      openViewOnly();
+    };
+  }
+
+  if (els.contextDownloadStrategy) {
+    els.contextDownloadStrategy.onclick = function() {
+      if (!contextStrategyId) return;
+      hideContextMenu();
+      fetch("/api/strategies/source/" + encodeURIComponent(contextStrategyId))
+        .then(function(res) { return res.json(); })
+        .then(function(data) {
+          var blob = new Blob([data.source || ""], {type: "text/plain;charset=utf-8"});
+          var url = URL.createObjectURL(blob);
+          var a = document.createElement("a");
+          a.href = url;
+          a.download = contextStrategyId + ".py";
+          a.click();
+          URL.revokeObjectURL(url);
+        });
+    };
+  }
+
+  if (els.contextDeleteStrategy) {
+    els.contextDeleteStrategy.onclick = function() {
+      if (!contextStrategyId) return;
+      if (!confirm("Delete " + contextStrategyId + "?")) return;
+      fetch("/api/strategies/" + encodeURIComponent(contextStrategyId), { method: "DELETE" })
+        .then(function() {
+          loadStrategies();
+          hideContextMenu();
+        });
+    };
+  }
+
+  // Close modal
+  if (els.sourceModalClose) {
+    els.sourceModalClose.onclick = function() {
+      els.sourceModal.classList.add("hidden");
+    };
+  }
+
+  if (els.sourceModalMask) {
+    els.sourceModalMask.onclick = function() {
+      els.sourceModal.classList.add("hidden");
+    };
+  }
+
+  // Save button
+  if (els.sourceModalSave) {
+    els.sourceModalSave.onclick = function() {
+      saveAndRun();
+    };
+  }
+
+  // Upload
+  if (els.strategyUpload) {
+    els.strategyUpload.addEventListener("change", function(evt) {
+      var file = evt.target.files[0];
+      if (!file) return;
+      var formData = new FormData();
+      formData.append("file", file);
+      els.status.textContent = "Uploading...";
+      fetch("/api/strategies/upload", { method: "POST", body: formData })
+        .then(function(res) { return res.json(); })
+        .then(function(data) {
+          els.status.textContent = "Uploaded: " + file.name;
+          loadStrategies();
+          selectedStrategyId = data.id;
+        })
+        .catch(function(e) {
+          els.status.textContent = e.message || e;
+        });
+      evt.target.value = "";
+    });
+  }
+
+  // Close on click outside
+  document.addEventListener("click", function(evt) {
+    if (els.contextMenu && !els.contextMenu.contains(evt.target)) {
+      hideContextMenu();
+    }
+  });
+
+  // Escape
+  document.addEventListener("keydown", function(evt) {
+    if (evt.key === "Escape") {
+      hideContextMenu();
+      els.sourceModal.classList.add("hidden");
+    }
+  });
+  
+  // Editor sync highlight
+  if (els.sourceEditor) {
+    els.sourceEditor.addEventListener("input", function() {
+      syncEditorHighlight(els.sourceEditor.value);
+    });
+    els.sourceEditor.addEventListener("scroll", function() {
+      if (els.editorHighlight) {
+        els.editorHighlight.scrollTop = els.sourceEditor.scrollTop;
+        els.editorHighlight.scrollLeft = els.sourceEditor.scrollLeft;
+      }
+    });
+  }
+}
+
+function openEditor() {
+  if (!contextStrategyId) return;
+  var strategyId = contextStrategyId;
+  els.sourceTitle.textContent = "Edit - " + strategyId;
+  els.sourceModal.classList.remove("hidden");
+  els.sourceEditor.style.display = "block";
+  els.editorHighlight.style.display = "block";
+  els.sourceCode.style.display = "none";
+  if (els.sourceModalSave) els.sourceModalSave.style.display = "inline-block";
+  els.sourceEditor.value = "Loading...";
+  els.sourceEditor.disabled = true;
+  els.editorLoading.classList.remove("hidden");
+
+  fetch("/api/strategies/source/" + encodeURIComponent(strategyId))
+    .then(function(res) { return res.json(); })
+    .then(function(data) {
+      els.editorLoading.classList.add("hidden");
+      els.sourceEditor.disabled = false;
+      var source = data.source || "";
+      els.sourceEditor.value = source;
+      syncEditorHighlight(source);
     });
 }
 
-function renderEditorSource(strategyId, source) {
-  els.sourceTitle.textContent = `编辑策略 - ${strategyId}`;
-  els.editorLoading.classList.add("hidden");
-  els.sourceEditor.disabled = false;
-  els.sourceEditor.value = source;
-  
-  // 语法高亮 - textarea 透明叠加
-  if (window.hljs && window.hljs.highlight) {
-    highlightSource(source, els.editorHighlight);
+function openViewOnly() {
+  if (!contextStrategyId) return;
+  var strategyId = contextStrategyId;
+  els.sourceTitle.textContent = "Source - " + strategyId;
+  els.sourceModal.classList.remove("hidden");
+  els.sourceEditor.style.display = "none";
+  els.editorHighlight.style.display = "none";
+  els.sourceCode.style.display = "block";
+  if (els.sourceModalSave) els.sourceModalSave.style.display = "none";
+  els.sourceCode.textContent = "Loading...";
+
+  fetch("/api/strategies/source/" + encodeURIComponent(strategyId))
+    .then(function(res) { return res.json(); })
+    .then(function(data) {
+      if (hljs && hljs.highlight) {
+        var result = hljs.highlight(data.source || "", {language: "python"});
+        els.sourceCode.innerHTML = result.value;
+      } else {
+        els.sourceCode.textContent = data.source || "";
+      }
+    });
+}
+
+function syncEditorHighlight(source) {
+  if (hljs && els.editorHighlight) {
+    var result = hljs.highlight(source || "", {language: "python"});
+    els.editorHighlight.innerHTML = result.value;
   }
 }
 
-function renderReadOnlySource(strategyId, source) {
-  els.sourceTitle.textContent = `策略源码 - ${strategyId}`;
-  
-  if (window.hljs && window.hljs.highlight) {
-    highlightSource(source, els.sourceCode);
-    els.sourceCode.className = "hljs language-python";
-  } else {
-    els.sourceCode.textContent = source;
-    els.sourceCode.className = "language-python";
-  }
-}
-
-function highlightSource(source, element) {
-  if (!window.hljs) {
-    element.textContent = source;
-    return;
-  }
-  const result = window.hljs.highlight(source, { language: "python" });
-  element.innerHTML = result.value;
-}
-
-function saveSourceAndRunBacktest() {
-  if (!editingStrategyId) return;
-  
-  const newSource = els.sourceEditor.value;
-  
-  // 显示加载动画
+function saveAndRun() {
+  if (!contextStrategyId) return;
+  var newSource = els.sourceEditor.value;
   els.editorLoading.classList.remove("hidden");
   els.sourceEditor.disabled = true;
-  setStatus("保存中...");
-  
-  fetch(`/api/strategies/${encodeURIComponent(editingStrategyId)}`, {
+  els.status.textContent = "Saving...";
+
+  fetch("/api/strategies/" + encodeURIComponent(contextStrategyId), {
     method: "PUT",
     body: newSource,
   })
-    .then(async (res) => {
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.detail || "保存失败");
-      }
-      return res.json();
+    .then(function(res) { return res.json(); })
+    .then(function() {
+      els.sourceModal.classList.add("hidden");
+      els.status.textContent = "Saved! Running backtest...";
+      runBacktest();
     })
-    .then(() => {
-      sourceCache.set(editingStrategyId, newSource);
-      setStatus("保存成功，正在运行回测...");
-      
-      // 关闭弹窗并运行回测
-      closeSourceModal();
-      return runBacktest();
-    })
-    .catch((err) => {
+    .catch(function(e) {
       els.editorLoading.classList.add("hidden");
       els.sourceEditor.disabled = false;
-      setStatus(String(err?.message || err));
+      els.status.textContent = e.message || e;
     });
 }
 
-function closeSourceModal() {
-  els.sourceModal.classList.add("hidden");
-  document.body.style.overflow = "";
-  editingStrategyId = null;
-}
+var lastResult = null;
 
-async function loadStrategies() {
-  const res = await fetch("/api/strategies");
-  if (!res.ok) throw new Error("加载策略列表示失败");
-  const data = await res.json();
-  els.list.innerHTML = "";
-
-  const items = data.items || [];
-  if (items.length === 0) {
-    els.list.innerHTML = `<div class="status">未找到 strategies/*.py</div>`;
+function runBacktest() {
+  if (!selectedStrategyId) {
+    els.status.textContent = "Select a strategy first";
     return;
   }
 
-  for (const item of items) {
-    const div = document.createElement("div");
-    div.className = "strategy-item";
-    div.dataset.id = item.id;
-    div.innerHTML = `
-      <div class="strategy-name">${item.name}</div>
-      <div class="strategy-id">${item.id}</div>
-    `;
+  var symbol = els.symbol.value.trim().toUpperCase();
+  var cash = Number(els.cash.value);
+  var startDate = els.startDate.value;
+  var endDate = els.endDate.value;
 
-    div.addEventListener("click", () => {
-      hideContextMenu();
-      selectStrategy(item.id);
-    });
+  if (!symbol) { els.status.textContent = "Enter stock code"; return; }
+  if (!cash || cash <= 0) { els.status.textContent = "Invalid cash"; return; }
+  if (!startDate || !endDate) { els.status.textContent = "Select dates"; return; }
 
-    div.addEventListener("contextmenu", (evt) => {
-      evt.preventDefault();
-      selectStrategy(item.id);
-      showContextMenu(evt.clientX, evt.clientY, item.id);
-    });
+  els.status.textContent = "Running backtest...";
+  els.runBtn.disabled = true;
 
-    els.list.appendChild(div);
-  }
-
-  selectStrategy(items[0].id);
-}
-
-function resizeCanvasToDisplaySize(canvas) {
-  const rect = canvas.getBoundingClientRect();
-  const dpr = window.devicePixelRatio || 1;
-  const width = Math.max(10, Math.floor(rect.width * dpr));
-  const height = Math.max(10, Math.floor(rect.height * dpr));
-  if (canvas.width !== width || canvas.height !== height) {
-    canvas.width = width;
-    canvas.height = height;
-    return true;
-  }
-  return false;
-}
-
-function drawText(ctx, text, x, y, color, align = "left") {
-  ctx.save();
-  ctx.fillStyle = color;
-  ctx.textAlign = align;
-  ctx.fillText(text, x, y);
-  ctx.restore();
-}
-
-function drawTriangle(ctx, x, y, size, color, direction) {
-  ctx.save();
-  ctx.fillStyle = color;
-  ctx.beginPath();
-  if (direction === "up") {
-    ctx.moveTo(x, y - size);
-    ctx.lineTo(x - size, y + size);
-    ctx.lineTo(x + size, y + size);
-  } else {
-    ctx.moveTo(x, y + size);
-    ctx.lineTo(x - size, y - size);
-    ctx.lineTo(x + size, y - size);
-  }
-  ctx.closePath();
-  ctx.fill();
-  ctx.restore();
-}
-
-function renderKlineChart(result) {
-  const container = els.klineContainer;
-  if (!container) return;
-
-  if (klineChart) {
-    klineChart.remove();
-    klineChart = null;
-    candleSeries = null;
-    volumeSeries = null;
-  }
-
-  container.innerHTML = "";
-
-  if (typeof LightweightCharts === "undefined") {
-    container.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#ff4d4f;">K 线图依赖加载失败</div>';
-    return;
-  }
-
-  if (!result || !result.ohlcv || result.ohlcv.length === 0) {
-    container.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--muted);">暂无 K 线数据</div>';
-    return;
-  }
-
-  const width = container.clientWidth || 800;
-  const height = container.clientHeight || 420;
-
-  klineChart = LightweightCharts.createChart(container, {
-    width,
-    height,
-    layout: {
-      background: { type: "solid", color: "transparent" },
-      textColor: "#aab3d6",
-    },
-    grid: {
-      vertLines: { color: "rgba(255,255,255,0.05)" },
-      horzLines: { color: "rgba(255,255,255,0.05)" },
-    },
-    rightPriceScale: { borderColor: "rgba(255,255,255,0.1)" },
-    timeScale: { borderColor: "rgba(255,255,255,0.1)", timeVisible: true },
-    handleScroll: { vertTouchDrag: false },
-  });
-
-  candleSeries = klineChart.addCandlestickSeries({
-    upColor: "#3ddc97",
-    downColor: "#ff4d4f",
-    borderUpColor: "#3ddc97",
-    borderDownColor: "#ff4d4f",
-    wickUpColor: "#3ddc97",
-    wickDownColor: "#ff4d4f",
-  });
-
-  volumeSeries = klineChart.addHistogramSeries({
-    color: "#26a69a",
-    priceFormat: { type: "volume" },
-    priceScaleId: "",
-  });
-
-  volumeSeries.priceScale().applyOptions({
-    scaleMargins: { top: 0.8, bottom: 0 },
-  });
-
-  const candleData = result.ohlcv.map((d) => ({
-    time: Math.floor(new Date(d.time).getTime() / 1000),
-    open: Number(d.open),
-    high: Number(d.high),
-    low: Number(d.low),
-    close: Number(d.close),
-  }));
-
-  const volumeData = result.ohlcv.map((d) => ({
-    time: Math.floor(new Date(d.time).getTime() / 1000),
-    value: Number(d.volume),
-    color: Number(d.close) >= Number(d.open) ? "rgba(61,220,151,0.4)" : "rgba(255,77,79,0.4)",
-  }));
-
-  candleSeries.setData(candleData);
-  volumeSeries.setData(volumeData);
-
-  function calcSMA(data, period) {
-    const result = [];
-    for (let i = 0; i < data.length; i++) {
-      if (i < period - 1) {
-        result.push({ time: data[i].time, value: null });
-      } else {
-        let sum = 0;
-        for (let j = 0; j < period; j++) {
-          sum += data[i - j].close;
-        }
-        result.push({ time: data[i].time, value: sum / period });
+  fetch("/api/backtest", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      strategy_id: selectedStrategyId,
+      symbol: symbol,
+      cash: cash,
+      start_date: startDate,
+      end_date: endDate,
+      commission: 0.001,
+    }),
+  })
+    .then(function(res) { return res.json(); })
+    .then(function(data) {
+      if (data.detail) {
+        els.status.textContent = data.detail;
+        return;
       }
-    }
-    return result;
-  }
-
-  const currentMaConfig = getMaConfig();
-  maSeries = {};
-  currentMaConfig.forEach(cfg => {
-    const series = klineChart.addLineSeries({ color: cfg.color, lineWidth: 1, priceLineVisible: false });
-    series.setData(calcSMA(candleData, cfg.period));
-    maSeries[cfg.label] = { series, color: cfg.color, period: cfg.period };
-  });
-
-  const lastCandle = candleData[candleData.length - 1];
-  let legendHtml = `<span style="margin-right:12px"><span style="display:inline-block;width:10px;height:10px;background:#3ddc97;border-radius:2px;margin-right:4px"></span>OHLC</span>`;
-  currentMaConfig.forEach(cfg => {
-    const maVal = calcSMA(candleData, cfg.period);
-    const val = maVal[maVal.length - 1]?.value?.toFixed(2) || "-";
-    legendHtml += `<span style="margin-right:12px"><span style="display:inline-block;width:10px;height:2px;background:${cfg.color};margin-right:4px;vertical-align:middle"></span>${cfg.label}: ${val}</span>`;
-  });
-  els.klineLegend.innerHTML = legendHtml;
-
-  const buyMarkers = (result.buys || []).map((m) => ({
-    time: Math.floor(new Date(m.date).getTime() / 1000),
-    position: "belowBar",
-    color: "#3ddc97",
-    shape: "arrowUp",
-    text: "B",
-  }));
-
-  const sellMarkers = (result.sells || []).map((m) => ({
-    time: Math.floor(new Date(m.date).getTime() / 1000),
-    position: "aboveBar",
-    color: "#ff4d4f",
-    shape: "arrowDown",
-    text: "S",
-  }));
-
-  candleSeries.setMarkers([...buyMarkers, ...sellMarkers]);
-  klineChart.timeScale().fitContent();
+      lastResult = data;
+      renderResults(data);
+      els.status.textContent = "Done";
+    })
+    .catch(function(e) {
+      els.status.textContent = e.message || e;
+    })
+    .finally(function() {
+      els.runBtn.disabled = false;
+    });
 }
 
-function renderEquityChart(result) {
-  const canvas = els.canvas;
-  const rect = canvas.getBoundingClientRect();
-  const dpr = window.devicePixelRatio || 1;
-  const w = Math.floor(rect.width * dpr);
-  const h = Math.floor(rect.height * dpr);
-  const containerW = rect.width;
+function renderResults(data) {
+  if (!data || !data.ohlcv || data.ohlcv.length === 0) {
+    els.klineContainer.innerHTML = "<div style='padding:10px;color:#aaa'>No K-line data</div>";
+    return;
+  }
 
-  const extraW = 100;
-  if (canvas.width !== w + extraW || canvas.height !== h) {
-    canvas.width = w + extraW;
+  // Render metrics
+  var m = data.metrics;
+  var fmtPct = function(x) { return Number.isFinite(Number(x)) ? Number(x).toFixed(2) + "%" : "-"; };
+  var fmtRatio = function(x) { return Number.isFinite(Number(x)) ? Number(x).toFixed(3) : "-"; };
+  var fmtMoney = function(x) { return Number.isFinite(x) ? x.toLocaleString(undefined, {maximumFractionDigits:2}) : "-"; };
+  
+  if (m) {
+    els.metrics.textContent = 
+      "策略:" + m.strategy + " | " +
+      "期初:" + fmtMoney(m.start_cash) + " | " +
+      "期末:" + fmtMoney(m.end_value) + " | " +
+      "收益:" + fmtMoney(m.pnl) + "(" + fmtPct(m.return_pct) + ") | " +
+      "年化:" + fmtPct(m.annual_return_pct) + " | " +
+      "夏普:" + fmtRatio(m.sharpe) + " | " +
+      "索提诺:" + fmtRatio(m.sortino) + " | " +
+      "最大回撤:" + fmtPct(m.max_drawdown_pct) + " | " +
+      "胜率:" + fmtPct(m.win_rate_pct) + " | " +
+      "盈亏比:" + fmtRatio(m.avg_win_loss_ratio) + " | " +
+      "卡尔马:" + fmtRatio(m.calmar) + " | " +
+      "买/卖:" + m.buy_count + "/" + m.sell_count;
+    
+    if (els.klineMetrics) {
+      els.klineMetrics.textContent = 
+        "收益:" + fmtMoney(m.pnl) + " " + fmtPct(m.return_pct) + 
+        " 夏普:" + fmtRatio(m.sharpe) + 
+        " 胜率:" + fmtPct(m.win_rate_pct);
+    }
+    
+    if (els.equityMetrics) {
+      els.equityMetrics.textContent = 
+        "期初:" + fmtMoney(m.start_cash) + 
+        " 期末:" + fmtMoney(m.end_value) + 
+        " 年化:" + fmtPct(m.annual_return_pct) + 
+        " 最大回撤:" + fmtPct(m.max_drawdown_pct);
+    }
+  }
+
+  // Render K-line using Lightweight Charts
+  if (typeof LightweightCharts !== "undefined") {
+    var container = els.klineContainer;
+    container.innerHTML = "";
+    
+    var width = container.clientWidth || 800;
+    var height = container.clientHeight || 420;
+    
+    var chart = LightweightCharts.createChart(container, {
+      width: width,
+      height: height,
+      layout: { background: { type: "solid", color: "transparent" }, textColor: "#aab3d6" },
+      grid: { vertLines: { color: "rgba(255,255,255,0.05)" }, horzLines: { color: "rgba(255,255,255,0.05)" } },
+      rightPriceScale: { borderColor: "rgba(255,255,255,0.1)" },
+      timeScale: { borderColor: "rgba(255,255,255,0.1)", timeVisible: true },
+    });
+    
+    var resizeTimer = null;
+    var currentWidth = width;
+    var currentHeight = height;
+    var ro = new ResizeObserver(function() {
+      if (resizeTimer) clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(function() {
+        var targetWidth = container.clientWidth;
+        var targetHeight = container.clientHeight;
+        var startTime = performance.now();
+        var duration = 250;
+        function animate(time) {
+          var elapsed = time - startTime;
+          var progress = Math.min(elapsed / duration, 1);
+          var eased = 1 - Math.pow(1 - progress, 3);
+          currentWidth = width + (targetWidth - width) * eased;
+          currentHeight = height + (targetHeight - height) * eased;
+          chart.resize(Math.floor(currentWidth), Math.floor(currentHeight));
+          if (progress < 1) requestAnimationFrame(animate);
+        }
+        requestAnimationFrame(animate);
+      }, 100);
+    });
+    ro.observe(container);
+    
+    var candleSeries = chart.addCandlestickSeries({
+      upColor: "#3ddc97",
+      downColor: "#ff4d4f",
+      borderUpColor: "#3ddc97",
+      borderDownColor: "#ff4d4f",
+      wickUpColor: "#3ddc97",
+      wickDownColor: "#ff4d4f",
+    });
+    
+    var candleData = data.ohlcv.map(function(d) {
+      return {
+        time: Math.floor(new Date(d.time).getTime() / 1000),
+        open: Number(d.open),
+        high: Number(d.high),
+        low: Number(d.low),
+        close: Number(d.close),
+      };
+    });
+    
+    candleSeries.setData(candleData);
+    
+    // Calculate and add MA lines
+    var closePrices = candleData.map(function(d) { return d.close; });
+    var times = candleData.map(function(d) { return d.time; });
+    var ma5 = calculateMA(closePrices, 5, times);
+    var ma10 = calculateMA(closePrices, 10, times);
+    var ma20 = calculateMA(closePrices, 20, times);
+    
+    var ma5Series = chart.addLineSeries({ color: "#ff9500", lineWidth: 1, priceLineColor: "#ff9500" });
+    ma5Series.setData(ma5);
+    
+    var ma10Series = chart.addLineSeries({ color: "#5ac8fa", lineWidth: 1, priceLineColor: "#5ac8fa" });
+    ma10Series.setData(ma10);
+    
+    var ma20Series = chart.addLineSeries({ color: "#af52de", lineWidth: 1, priceLineColor: "#af52de" });
+    ma20Series.setData(ma20);
+    
+    // Add buy/sell markers
+    var buyMarkers = (data.buys || []).map(function(m) {
+      return {
+        time: Math.floor(new Date(m.date).getTime() / 1000),
+        position: "belowBar",
+        color: "#3ddc97",
+        shape: "arrowUp",
+        text: "B",
+      };
+    });
+    
+    var sellMarkers = (data.sells || []).map(function(m) {
+      return {
+        time: Math.floor(new Date(m.date).getTime() / 1000),
+        position: "aboveBar",
+        color: "#ff4d4f",
+        shape: "arrowDown",
+        text: "S",
+      };
+    });
+    
+    candleSeries.setMarkers(buyMarkers.concat(sellMarkers));
+    chart.timeScale().fitContent();
+  } else {
+    els.klineContainer.innerHTML = "<div style='padding:10px;color:#aaa'>K-line chart library not loaded</div>";
+  }
+  
+  // Render equity curve
+  if (data.equity && data.equity.length > 0) {
+    renderEquityCurve(data.equity);
+  }
+}
+
+function calculateMA(prices, period, times) {
+  var result = [];
+  for (var i = 0; i < prices.length; i++) {
+    if (i < period - 1) {
+      result.push({ time: times[i], value: NaN });
+    } else {
+      var sum = 0;
+      for (var j = 0; j < period; j++) {
+        sum += prices[i - j];
+      }
+      result.push({ time: times[i], value: sum / period });
+    }
+  }
+  return result;
+}
+
+function renderEquityCurve(equity) {
+  var canvas = els.canvas;
+  var rect = canvas.getBoundingClientRect();
+  var dpr = window.devicePixelRatio || 1;
+  var w = Math.floor(rect.width * dpr);
+  var h = Math.floor(rect.height * dpr);
+  
+  if (canvas.width !== w || canvas.height !== h) {
+    canvas.width = w;
     canvas.height = h;
-    canvas.style.width = (w + extraW) / dpr + "px";
   }
-
-  const ctx = canvas.getContext("2d");
+  
+  var ctx = canvas.getContext("2d");
   ctx.clearRect(0, 0, w, h);
-
-  ctx.save();
-  ctx.scale(1, 1);
-  ctx.font = `${Math.max(12, Math.floor(containerW / 100))}px ui-sans-serif, system-ui`;
-  ctx.lineJoin = "round";
-  ctx.lineCap = "round";
-
-  if (!result || !result.equity || result.equity.length < 2) {
-    drawText(ctx, "暂无回测结果", w / 2, h / 2, "rgba(170,179,214,0.9)", "center");
-    ctx.restore();
-    return;
-  }
-
-  const padLeft = Math.max(85, Math.floor(containerW * 0.12));
-  const padRight = 20;
-  const padTop = Math.floor(Math.min(containerW, h) * 0.08);
-  const padBottom = Math.floor(Math.min(containerW, h) * 0.12);
-  const left = padLeft;
-  const right = w - padRight;
-  const top = padTop;
-  const bottom = h - padBottom;
-
-  const equity = result.equity;
-  const dates = equity.map((p) => p.date);
-  const values = equity.map((p) => Number(p.value));
-  let minV = Math.min(...values);
-  let maxV = Math.max(...values);
-
-  if (!Number.isFinite(minV) || !Number.isFinite(maxV)) {
-    drawText(ctx, "数据异常", w / 2, h / 2, "rgba(255,77,79,0.9)", "center");
-    ctx.restore();
-    return;
-  }
-
-  if (maxV === minV) {
-    maxV += 1;
-    minV -= 1;
-  }
-
-  const margin = (maxV - minV) * 0.08;
-  maxV += margin;
-  minV -= margin;
-
-  const n = values.length;
-  const xAt = (i) => left + (i / (n - 1)) * (right - left);
-  const yAt = (v) => top + ((maxV - v) / (maxV - minV)) * (bottom - top);
-
-  ctx.strokeStyle = "rgba(255,255,255,0.08)";
-  ctx.lineWidth = 1;
-  for (let i = 0; i <= 6; i++) {
-    const y = top + (i / 6) * (bottom - top);
-    ctx.beginPath();
-    ctx.moveTo(left, y);
-    ctx.lineTo(right, y);
-    ctx.stroke();
-  }
-
+  
+  var values = equity.map(function(p) { return Number(p.value); });
+  var dates = equity.map(function(p) { return p.date; });
+  
+  var minV = Math.min.apply(null, values);
+  var maxV = Math.max.apply(null, values);
+  
+  if (maxV === minV) { maxV += 1; minV -= 1; }
+  
+  var padLeft = Math.floor(rect.width * 0.03);
+  var padRight = 20;
+  var padTop = 20;
+  var padBottom = 30;
+  var left = padLeft;
+  var right = w - padRight;
+  var top = padTop;
+  var bottom = h - padBottom;
+  
+  var n = values.length;
+  var xAt = function(i) { return left + (i / (n - 1)) * (right - left); };
+  var yAt = function(v) { return top + ((maxV - v) / (maxV - minV)) * (bottom - top); };
+  
+  // Draw Y-axis labels (money)
   ctx.fillStyle = "rgba(170,179,214,0.9)";
+  ctx.font = "12px sans-serif";
   ctx.textAlign = "right";
   ctx.textBaseline = "middle";
-  for (let i = 0; i <= 3; i++) {
-    const t = i / 3;
-    const v = maxV - t * (maxV - minV);
-    const y = yAt(v);
-    ctx.fillText(formatMoney(v), left - 30, y);
+  
+  var fmtMoney = function(x) { return x >= 1000000 ? (x/1000000).toFixed(1) + "M" : x >= 1000 ? (x/1000).toFixed(0) + "K" : x.toFixed(0); };
+  
+  for (var i = 0; i <= 4; i++) {
+    var t = i / 4;
+    var v = maxV - t * (maxV - minV);
+    var y = yAt(v);
+    ctx.fillText(fmtMoney(v), left - 10, y);
   }
-
+  
+  // Draw X-axis labels (dates)
   ctx.textAlign = "center";
   ctx.textBaseline = "top";
-  for (let i = 0; i < 6; i++) {
-    const idx = Math.floor((i / 5) * (n - 1));
-    const x = xAt(idx);
-    const dateStr = dates[idx];
-    ctx.fillText(dateStr ? dateStr.substring(5) : '', x, bottom + 12);
+  for (var i = 0; i <= 4; i++) {
+    var idx = Math.floor(i * (n - 1) / 4);
+    var x = xAt(idx);
+    var dateStr = dates[idx] || "";
+    ctx.fillText(dateStr.substring(5), x, bottom + 8);
   }
-
+  
+  // Draw the equity line
   ctx.strokeStyle = "rgba(79,124,255,0.95)";
   ctx.lineWidth = 2;
   ctx.beginPath();
   ctx.moveTo(xAt(0), yAt(values[0]));
-  for (let i = 1; i < n; i++) {
+  for (var i = 1; i < n; i++) {
     ctx.lineTo(xAt(i), yAt(values[i]));
   }
   ctx.stroke();
-
-  const dateToIndex = new Map();
-  for (let i = 0; i < dates.length; i++) {
-    dateToIndex.set(dates[i], i);
-  }
-
-  for (const m of result.buys || []) {
-    const i = dateToIndex.get(m.date);
-    if (i == null) continue;
-    drawTriangle(ctx, xAt(i), yAt(values[i]), 7, "rgba(61,220,151,0.95)", "up");
-  }
-
-  for (const m of result.sells || []) {
-    const i = dateToIndex.get(m.date);
-    if (i == null) continue;
-    drawTriangle(ctx, xAt(i), yAt(values[i]), 7, "rgba(255,77,79,0.95)", "down");
-  }
-
-  ctx.restore();
 }
 
-function renderChart(result) {
-  renderKlineChart(result);
-  renderEquityChart(result);
-}
-
-async function runBacktest() {
-  if (!selectedStrategyId) {
-    setStatus("请先选择策略");
-    return;
-  }
-
-  const symbol = els.symbol.value.trim().toUpperCase();
-  const cash = Number(els.cash.value);
-  const startDate = els.startDate.value;
-  const endDate = els.endDate.value;
-
-  if (!symbol) return setStatus("股票代码不能为空");
-  if (!Number.isFinite(cash) || cash <= 0) return setStatus("资金金额必须 > 0");
-  if (!startDate || !endDate) return setStatus("请选择开始/结束时间");
-  if (startDate > endDate) return setStatus("开始时间不能晚于结束时间");
-
-  setStatus("回测中...");
-  els.runBtn.disabled = true;
-  els.exportBtn.disabled = true;
-  renderMetrics(null);
-
-  try {
-    const res = await fetch("/api/backtest", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        strategy_id: selectedStrategyId,
-        symbol,
-        cash,
-        start_date: startDate,
-        end_date: endDate,
-        commission: 0.001,
-      }),
-    });
-
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      setStatus(data.detail || "回测失败");
-      return;
-    }
-
-    lastResult = data;
-    renderMetrics(data.metrics);
-    renderChart(data);
-    els.exportBtn.disabled = false;
-    setStatus("完成");
-  } catch (e) {
-    setStatus(String(e?.message || e));
-  } finally {
-    els.runBtn.disabled = false;
-  }
-}
-
-function setupEvents() {
-  els.runBtn.addEventListener("click", runBacktest);
-  els.exportBtn.addEventListener("click", exportTradesCsv);
-
-  // 股票代码输入事件 - 自动补全
-  els.symbol.addEventListener("input", handleSymbolInput);
-  els.symbol.addEventListener("keydown", handleAutocompleteKeydown);
-  
-  // 策略文件上传事件
-  els.strategyUpload.addEventListener("change", async (evt) => {
-    const file = evt.target.files[0];
-    if (!file) return;
-    
-    setStatus("上传中...");
-    
-    try {
-      const formData = new FormData();
-      formData.append("file", file);
-      
-      const res = await fetch("/api/strategies/upload", {
-        method: "POST",
-        body: formData,
-      });
-      
-      const data = await res.json();
-      
-      if (!res.ok) {
-        setStatus(data.detail || "上传失败");
-        return;
-      }
-      
-      setStatus(`上传成功: ${file.name}`);
-      
-      // 重新加载策略列表
-      await loadStrategies();
-      
-      // 选中新上传的策略
-      const newId = data.id;
-      selectStrategy(newId);
-      
-    } catch (e) {
-      setStatus(String(e?.message || e));
-    }
-    
-    // 清空 input，允许重复上传同名文件
-    evt.target.value = "";
-  });
-  
-  // 点击外部关闭自动补全
-  document.addEventListener("click", (evt) => {
-    if (!els.symbolAutocomplete.contains(evt.target) && !els.symbol.contains(evt.target)) {
-      hideAutocomplete();
-    }
-    if (!els.contextMenu.contains(evt.target)) {
-      hideContextMenu();
-    }
-  });
-
-  // 侧边栏折叠/展开
-  els.toggleSidebar.addEventListener("click", () => {
-    els.sidebar.classList.toggle("collapsed");
-    setTimeout(() => {
-      if (klineChart) {
-        klineChart.resize(els.klineContainer.clientWidth, els.klineContainer.clientHeight);
-      }
-      renderEquityChart(lastResult);
-    }, 320);
-  });
-
-  els.contextRunBacktest.addEventListener("click", () => {
-    hideContextMenu();
-    runBacktest();
-  });
-  
-  els.contextEditSource.addEventListener("click", () => {
-    hideContextMenu();
-    openSourceModal(); // 编辑器模式
-  });
-  
-  els.contextViewSource.addEventListener("click", () => {
-    hideContextMenu();
-    openViewOnlyModal(); // 只读查看模式
-  });
-  
-  els.contextDeleteStrategy.addEventListener("click", async () => {
-    if (!contextStrategyId) return;
-    
-    if (!confirm(`确定要删除策略 "${contextStrategyId}" 吗？此操作不可恢复。`)) {
-      return;
-    }
-    
-    try {
-      const res = await fetch(`/api/strategies/${encodeURIComponent(contextStrategyId)}`, {
-        method: "DELETE",
-      });
-      
-      if (!res.ok) {
-        const data = await res.json();
-        setStatus(data.detail || "删除失败");
-        return;
-      }
-      
-      setStatus("删除成功");
-      
-      await loadStrategies();
-      
-      hideContextMenu();
-    } catch (e) {
-      setStatus(String(e?.message || e));
-    }
-  });
-  
-  els.sourceModalClose.addEventListener("click", closeSourceModal);
-  els.sourceModalMask.addEventListener("click", closeSourceModal);
-  
-  // 保存按钮 - Ctrl+S 快捷键
-  els.sourceEditor.addEventListener("keydown", (evt) => {
-    if ((evt.ctrlKey || evt.metaKey) && evt.key === "s") {
-      evt.preventDefault();
-      saveSourceAndRunBacktest();
-    }
-});
-   
-  // 保存按钮
-  els.sourceModalSave.addEventListener("click", saveSourceAndRunBacktest);
-  
-  document.addEventListener("keydown", (evt) => {
-    if (evt.key === "Escape") {
-      hideContextMenu();
-      closeSourceModal();
-      hideAutocomplete();
-    }
-  });
-
-  window.addEventListener("resize", () => {
-    renderEquityChart(lastResult);
-    if (klineChart) {
-      klineChart.applyOptions({
-        width: els.klineContainer.clientWidth,
-        height: els.klineContainer.clientHeight,
-      });
-    }
-  });
-}
-
-function setup() {
-  setDefaultDates();
-  renderChart(null);
-  setupEvents();
-
-  loadStrategies().catch((e) => {
-    setStatus(String(e?.message || e));
-  });
-}
-
-setup();
+// Start
+init();

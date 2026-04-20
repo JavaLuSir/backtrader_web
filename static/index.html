@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Backtrader Web</title>
   <link rel="stylesheet" href="/static/styles.css" />
-  <link rel="stylesheet" href="/static/github-dark.min.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css" />
 </head>
 <body>
   <div id="app">
@@ -69,12 +69,19 @@
       </section>
 
       <section id="chart-section">
+        <div class="chart-header">
+          <div>K线走势</div>
+          <div id="kline-metrics" class="chart-metrics"></div>
+        </div>
         <div id="kline-wrapper">
           <div id="kline-legend"></div>
           <div id="kline-container"></div>
         </div>
+        <div class="chart-header">
+          <div>资金曲线</div>
+          <div id="equity-metrics" class="chart-metrics"></div>
+        </div>
         <div id="equity-container">
-          <div class="chart-title">资金曲线</div>
           <canvas id="chart"></canvas>
         </div>
       </section>
@@ -86,6 +93,7 @@
     <button id="btnBacktest">开始回测</button>
     <button id="btnEdit">编辑代码</button>
     <button id="btnView">查看源代码</button>
+    <button id="btnDownload">下载策略</button>
     <button id="btnDelete" style="color:var(--danger)">删除策略</button>
   </div>
 
@@ -101,8 +109,9 @@
         </div>
       </div>
       <div id="editor-wrapper" class="editor-wrapper">
-        <textarea id="source-editor" class="source-editor" spellcheck="false"></textarea>
-        <pre id="editor-highlight" class="editor-highlight"></pre>
+        <pre id="source-code-view" class="source-code-view"></pre>
+        <textarea id="source-editor" class="source-editor" spellcheck="false" style="display:none"></textarea>
+        <pre id="editor-highlight" class="editor-highlight" style="display:none"></pre>
       </div>
       <div id="editor-loading" class="editor-loading hidden">
         <div class="spinner"></div>
@@ -113,7 +122,8 @@
 
   <!-- 本地库 -->
   <script src="/static/lightweight-charts.js"></script>
-  <script src="/static/highlight.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/python.min.js"></script>
   <script src="/static/app.js"></script>
 </body>
 </html>

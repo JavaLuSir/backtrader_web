@@ -1,5 +1,5 @@
 """
-MA Price Cross Strategy - 均线价格交叉策略
+MA Price Cross Strategy - 均线价格交叉策
 
 【策略原理】
 基于价格与均线的交叉关系进行交易的简单趋势策略。
